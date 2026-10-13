@@ -59,7 +59,6 @@ final class Cleanup {
 	 * @return void
 	 */
 	public static function before_delete( int $attachment_id ): void {
-		$meta     = wp_get_attachment_metadata( $attachment_id, true );
 		$attached = get_attached_file( $attachment_id );
 
 		if ( ! $attached ) {
@@ -67,7 +66,7 @@ final class Cleanup {
 		}
 
 		$directory = dirname( $attached );
-		$files     = [ ...Pruner::made( $attachment_id ), ...( is_array( $meta ) ? (array) ( $meta[ Converter::PREVIOUS ] ?? [] ) : [] ) ];
+		$files     = [ ...Pruner::made( $attachment_id ), ...(array) get_post_meta( $attachment_id, Converter::PREVIOUS, false ) ];
 
 		foreach ( $files as $file ) {
 			wp_delete_file( $directory . '/' . basename( (string) $file ) );

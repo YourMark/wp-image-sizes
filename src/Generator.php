@@ -151,56 +151,65 @@ final class Generator {
 	/**
 	 * The size a path names, or the one that took its place.
 	 *
-	 * The file name only narrows the search to an attachment; what is made is
-	 * decided by its metadata, so a request cannot ask for dimensions nobody
+	 * The file name only narrows the search to attachments; what is made is
+	 * decided by their metadata, so a request cannot ask for dimensions nobody
 	 * registered. Every candidate is checked for the exact name before any is
 	 * taken as a stand-in, so attachments that share a stem cannot answer for
-	 * each other.
+	 * each other. For a stand-in, an attachment whose source had the requested
+	 * extension goes first: photo-300x225.jpg belongs to photo.jpg, not to the
+	 * photo.png beside it.
 	 *
 	 * @param string $relative Path below the uploads base.
 	 * @return array|null
 	 * @phpstan-return Found|null
 	 */
 	private static function find( string $relative ): ?array {
-		if ( ! preg_match( '#^((?:[^/]+/)*)([^/]+)-(\d+)x(\d+)\.[a-z0-9]+$#i', $relative, $match ) ) {
+		if ( ! preg_match( '#^((?:[^/]+/)*)([^/]+)-(\d+)x(\d+)\.([a-z0-9]+)$#i', $relative, $match ) ) {
 			return null;
 		}
 
-		[ , $directory, $stem, $width, $height ] = $match;
-		$file                                    = basename( $relative );
-		$candidates                              = [];
+		[ , $directory, $stem, $width, $height, $extension ] = $match;
+		$file       = basename( $relative );
+		$source     = self::split_stem( $stem )[1] ?? self::normal_extension( $extension );
+		$candidates = [];
 
-		foreach ( self::attachments( $directory, $stem ) as $id ) {
-			$meta = wp_get_attachment_metadata( $id );
-
-			$candidates[ $id ] = array_filter(
+		foreach ( self::attachments( $directory, $stem ) as $id => $names ) {
+			$meta  = wp_get_attachment_metadata( $id );
+			$sizes = array_filter(
 				is_array( $meta ) ? (array) ( $meta['sizes'] ?? [] ) : [],
 				fn( $size ): bool => is_array( $size ) && ! empty( $size['file'] ) && ! empty( $size['width'] ) && ! empty( $size['height'] )
 			);
-		}
 
-		foreach ( $candidates as $id => $sizes ) {
 			foreach ( $sizes as $name => $size ) {
 				if ( $size['file'] === $file ) {
 					return self::found( $id, (string) $name, $size, true );
 				}
 			}
+
+			$extensions        = array_map( fn( string $name ): string => self::normal_extension( pathinfo( $name, PATHINFO_EXTENSION ) ), $names );
+			$candidates[ $id ] = [
+				'sizes' => $sizes,
+				'match' => in_array( $source, $extensions, true ),
+			];
 		}
 
+		// Stable: among equals the oldest attachment stays first.
+		uasort( $candidates, fn( array $a, array $b ): int => (int) $b['match'] <=> (int) $a['match'] );
+
 		// The same name in another format: a URL saved before a format switch.
-		foreach ( $candidates as $id => $sizes ) {
-			foreach ( $sizes as $name => $size ) {
+		foreach ( $candidates as $id => $candidate ) {
+			foreach ( $candidate['sizes'] as $name => $size ) {
 				if ( pathinfo( (string) $size['file'], PATHINFO_FILENAME ) === pathinfo( $file, PATHINFO_FILENAME ) ) {
 					return self::found( $id, (string) $name, $size, false );
 				}
 			}
 		}
 
-		foreach ( $candidates as $id => $sizes ) {
-			$nearest = self::nearest( $sizes, (int) $width, (int) $height );
+		foreach ( $candidates as $id => $candidate ) {
+			$nearest = self::nearest( $candidate['sizes'], (int) $width, (int) $height );
 
 			if ( $nearest !== null ) {
-				return self::found( $id, $nearest, $sizes[ $nearest ], false );
+				return self::found( $id, $nearest, $candidate['sizes'][ $nearest ], false );
 			}
 		}
 
@@ -208,43 +217,66 @@ final class Generator {
 	}
 
 	/**
-	 * Attachments whose sizes can carry a stem, oldest first.
+	 * Attachments whose sizes can carry a stem, oldest first, with the file names that matched.
 	 *
-	 * The stem's own file, or its -scaled or -rotated copy, in any image
-	 * extension. A stem that ends in a source extension, as lazy sizes in
-	 * another format do (photo-jpg), is looked up without it as well. Exact
-	 * names rather than a LIKE: the lookup reads only _wp_attached_file rows and
-	 * never misses the right attachment behind a row limit.
+	 * Matches the attachment's own file, its -scaled or -rotated copy, and any
+	 * file it was converted from, in every image extension. A stem with a
+	 * source extension (photo--jpg) is looked up by the name before it. Exact
+	 * names rather than a LIKE, so no row limit can hide the right attachment
+	 * behind lookalikes.
 	 *
 	 * @param string $directory Directory below the uploads base, with a trailing slash or empty.
 	 * @param string $stem      Name the sizes carry.
-	 * @return int[]
+	 * @return array<int, string[]> Attachment ID => matching file names below the uploads base.
 	 */
 	public static function attachments( string $directory, string $stem ): array {
 		global $wpdb;
 
-		$stems = [ $stem ];
-
-		if ( preg_match( '/^(.+)-(?:' . implode( '|', self::SOURCE_EXTENSIONS ) . ')$/i', $stem, $match ) ) {
-			$stems[] = $match[1];
-		}
-
+		$base  = self::split_stem( $stem )[0] ?? $stem;
 		$names = [];
 
-		foreach ( $stems as $candidate ) {
-			foreach ( self::ATTACHED_SUFFIXES as $suffix ) {
-				foreach ( self::SOURCE_EXTENSIONS as $extension ) {
-					$names[] = "{$directory}{$candidate}{$suffix}.{$extension}";
-				}
+		foreach ( self::ATTACHED_SUFFIXES as $suffix ) {
+			foreach ( self::SOURCE_EXTENSIONS as $extension ) {
+				$names[] = "{$directory}{$base}{$suffix}.{$extension}";
 			}
 		}
 
 		$placeholders = implode( ',', array_fill( 0, count( $names ), '%s' ) );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- No API finds an attachment by file name; the placeholders are built above.
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value IN ({$placeholders}) ORDER BY post_id LIMIT 10", $names ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- No API finds an attachment by file name; the placeholders are built above.
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key IN ('_wp_attached_file', %s) AND meta_value IN ({$placeholders}) ORDER BY post_id", Converter::PREVIOUS, ...$names ) );
 
-		return array_map( 'intval', $ids );
+		$attachments = [];
+
+		foreach ( $rows as $row ) {
+			$attachments[ (int) $row->post_id ][] = (string) $row->meta_value;
+		}
+
+		return $attachments;
+	}
+
+	/**
+	 * A lazy stem split into its name and source extension, as in photo--jpg.
+	 *
+	 * @param string $stem Name a size carries.
+	 * @return array{0: string, 1: string}|array{} Name and normalised extension, or nothing for a plain stem.
+	 */
+	private static function split_stem( string $stem ): array {
+		$pattern = '/^(.+)' . preg_quote( Sizes::SEPARATOR, '/' ) . '(' . implode( '|', self::SOURCE_EXTENSIONS ) . ')$/i';
+
+		return preg_match( $pattern, $stem, $match ) ? [ $match[1], self::normal_extension( $match[2] ) ] : [];
+	}
+
+	/**
+	 * An extension in lower case, with JPEG's spellings as one.
+	 *
+	 * @param string $extension Extension.
+	 * @return string
+	 */
+	private static function normal_extension( string $extension ): string {
+		$extension = strtolower( $extension );
+
+		return in_array( $extension, [ 'jpeg', 'jpe' ], true ) ? 'jpg' : $extension;
 	}
 
 	/**
@@ -490,14 +522,15 @@ final class Generator {
 			return $saved;
 		}
 
+		// Recorded before it exists: a request that dies in between leaves a record of nothing, which pruning clears, rather than a file nobody knows about.
+		Pruner::record( $size['attachment'], $size['file'] );
+
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- An atomic rename is the point; WP_Filesystem::move() may copy.
 		if ( ! rename( $saved['path'], $size['target'] ) ) {
 			wp_delete_file( $saved['path'] );
 
 			return new WP_Error( 'yourmark_image_sizes_rename', "Could not move {$saved['file']} into place." );
 		}
-
-		Pruner::record( $size['attachment'], $size['file'] );
 
 		return true;
 	}

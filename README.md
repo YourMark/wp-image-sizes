@@ -14,14 +14,20 @@ Works with any theme. It hooks into core's attachment metadata, so `srcset`,
    Every registered size is added to the metadata when it is read, never
    stored. A size registered later works for every existing upload at once.
    A size in another format than its source carries the source extension
-   (`photo-jpg-300x200.webp`), so `photo.jpg` and `photo.png` in one folder
-   never share size files.
+   after two hyphens (`photo--jpg-300x200.webp`), so `photo.jpg` and
+   `photo.png` in one folder never share size files. No upload can collide
+   with that: WordPress collapses any run of hyphens in an upload's name.
+   The block editor's in-browser processing (WordPress 7.1) is switched off
+   while sizes are lazy: it only scales and rotates a camera photo as part
+   of making sizes, and the server does both anyway.
 2. **First request:** WordPress checks that the file name belongs to an image
    of this site, makes the size its metadata lists, sends it and leaves it on
    disk. Nobody can request made-up dimensions: only sizes in the metadata are
    ever made.
-   - A name from before a format switch or a change in dimensions gets a 301 to
-     the size that replaced it, so URLs saved in content keep working. The 301
+   - A name from before a format switch, a change in dimensions or a
+     conversion to a new file name gets a 301 to the size that replaced it, so
+     URLs saved in content keep working. Among images that share a name, the
+     one whose source had the requested extension wins. The 301
      expires after a day, so switching formats back and forth cannot leave a
      browser in a redirect loop. The target is made by its own request.
    - At most two images are resized at once (`yourmark/image-sizes/concurrency`);

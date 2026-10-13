@@ -48,7 +48,8 @@ final class Urls {
 			return $url;
 		}
 
-		return add_query_arg( Endpoint::PARAM, rawurlencode( $relative ), home_url( '/index.php' ) );
+		// Slashes left as they are: core only builds a srcset when the src contains the size's path, as in 2026/10/photo-300x200.webp.
+		return add_query_arg( Endpoint::PARAM, str_replace( '%2F', '/', rawurlencode( $relative ) ), home_url( '/index.php' ) );
 	}
 
 	/**

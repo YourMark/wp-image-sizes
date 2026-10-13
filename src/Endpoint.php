@@ -54,7 +54,7 @@ final class Endpoint {
 			return;
 		}
 
-		$response = self::respond( $uri );
+		$response = self::respond( $uri, $relative );
 
 		if ( $response === null ) {
 			return;
@@ -83,13 +83,16 @@ final class Endpoint {
 	 * WordPress. A request through the PHP URL is always this plugin's, and gets
 	 * a 404 rather than whatever page WordPress would render there.
 	 *
-	 * @param string $uri Request URI, path and query.
+	 * @param string      $uri      Request URI, path and query.
+	 * @param string|null $relative Its path below the uploads base, when the caller already worked it out.
 	 * @return array|null
 	 * @phpstan-return Response|null
 	 */
-	public static function respond( string $uri ): ?array {
-		$php_url  = str_contains( (string) wp_parse_url( $uri, PHP_URL_QUERY ), self::PARAM . '=' );
-		$relative = Generator::relative_path( $uri );
+	public static function respond( string $uri, ?string $relative = null ): ?array {
+		parse_str( (string) wp_parse_url( $uri, PHP_URL_QUERY ), $query );
+
+		$php_url  = isset( $query[ self::PARAM ] );
+		$relative = $relative ?? Generator::relative_path( $uri );
 		$result   = $relative === null ? null : Generator::resolve( $relative );
 
 		if ( $result === null ) {
@@ -106,7 +109,8 @@ final class Endpoint {
 			return [
 				'status'  => $result['permanent'] ? 301 : 302,
 				'headers' => [
-					'Location'      => wp_sanitize_redirect( $result['url'] ),
+					// Through the PHP URL while the target has no file and the server would not pass it on.
+					'Location'      => wp_sanitize_redirect( Urls::url( $result['url'] ) ),
 					'Cache-Control' => $result['permanent'] ? 'public, max-age=' . DAY_IN_SECONDS : 'no-store, max-age=0',
 				],
 				'file'    => null,

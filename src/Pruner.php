@@ -141,8 +141,9 @@ final class Pruner {
 	/**
 	 * Every size file to delete when an attachment's file is replaced.
 	 *
-	 * The files this plugin made, and any file under a lazy size's name: one
-	 * made before the plugin kept records still shows the old image.
+	 * The files this plugin made, and a file under one of the attachment's lazy
+	 * size names when no other attachment shares its name: one made before the
+	 * plugin kept records still shows the old image.
 	 *
 	 * @param int                  $attachment_id Attachment ID.
 	 * @param array<string, mixed> $metadata      The new metadata, before lazy sizes are added.
@@ -158,11 +159,11 @@ final class Pruner {
 		$directory = dirname( $attached );
 		$files     = self::made( $attachment_id );
 		$relative  = dirname( (string) ( $metadata['file'] ?? '' ) );
-		$others    = array_diff( Generator::attachments( $relative === '.' ? '' : "{$relative}/", Sizes::stem( $metadata ) ), [ $attachment_id ] );
+		$others    = array_diff( array_keys( Generator::attachments( $relative === '.' ? '' : "{$relative}/", Sizes::stem( $metadata ) ) ), [ $attachment_id ] );
 
 		// A file under a lazy name that was not recorded, made before the records existed, is only this attachment's when no other shares its name.
 		if ( ! $others ) {
-			$lazy = Sizes::add_lazy_sizes( $metadata );
+			$lazy = Sizes::add_lazy_sizes( $metadata, $attachment_id );
 
 			foreach ( is_array( $lazy ) ? (array) ( $lazy['sizes'] ?? [] ) : [] as $size ) {
 				if ( ! empty( $size[ Sizes::LAZY ] ) ) {

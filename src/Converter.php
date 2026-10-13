@@ -15,9 +15,12 @@ use WP_Error;
 final class Converter {
 
 	/**
-	 * Metadata key listing files an attachment was converted from.
+	 * Post meta key, one row per file an attachment was converted from, below the uploads base.
+	 *
+	 * Post meta rather than attachment metadata, so a request for an old size
+	 * name can find the attachment by it.
 	 */
-	public const PREVIOUS = 'yourmark_previous_files';
+	public const PREVIOUS = '_yourmark_image_sizes_previous';
 
 	/**
 	 * Store an attachment's file in the format chosen under Settings > Media.
@@ -58,13 +61,12 @@ final class Converter {
 		$meta = wp_get_attachment_metadata( $attachment_id, true );
 		$meta = is_array( $meta ) ? $meta : [];
 
-		$meta['file']           = _wp_relative_upload_path( $saved['path'] );
-		$meta['width']          = $saved['width'];
-		$meta['height']         = $saved['height'];
-		$meta['filesize']       = (int) filesize( $saved['path'] );
-		$meta[ self::PREVIOUS ] = [ ...(array) ( $meta[ self::PREVIOUS ] ?? [] ), basename( $source ) ];
-		$sizes                  = (array) ( $meta['sizes'] ?? [] );
-		$registered             = wp_get_registered_image_subsizes();
+		$meta['file']     = _wp_relative_upload_path( $saved['path'] );
+		$meta['width']    = $saved['width'];
+		$meta['height']   = $saved['height'];
+		$meta['filesize'] = (int) filesize( $saved['path'] );
+		$sizes            = (array) ( $meta['sizes'] ?? [] );
+		$registered       = wp_get_registered_image_subsizes();
 
 		// Registered sizes in the old format make way for lazy ones in the new; any other size could not come back, so it stays.
 		$dropped       = array_filter( $sizes, fn( $size, $name ): bool => is_array( $size ) && isset( $registered[ $name ] ) && ( $size['mime-type'] ?? '' ) !== $target, ARRAY_FILTER_USE_BOTH );
@@ -77,6 +79,7 @@ final class Converter {
 			}
 		}
 
+		add_post_meta( $attachment_id, self::PREVIOUS, _wp_relative_upload_path( $source ) );
 		update_attached_file( $attachment_id, $saved['path'] );
 		wp_update_attachment_metadata( $attachment_id, $meta );
 		wp_update_post(
