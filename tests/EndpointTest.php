@@ -12,6 +12,9 @@ use YourMark\ImageSizes\Endpoint;
 use YourMark\ImageSizes\Generator;
 use YourMark\ImageSizes\Pruner;
 
+// Test code: never run it over HTTP, although it sits in the web root.
+PHP_SAPI === 'cli' || exit;
+
 /**
  * What a request for a size gets: the file, a redirect, a stand-in or a 404.
  */

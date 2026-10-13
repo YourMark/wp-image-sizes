@@ -12,6 +12,9 @@ use ImagickPixel;
 use WP_UnitTestCase;
 use YourMark\ImageSizes\Endpoint;
 
+// Test code: never run it over HTTP, although it sits in the web root.
+PHP_SAPI === 'cli' || exit;
+
 /**
  * Makes test images, uploads them the way the media library does, and cleans up the files.
  */

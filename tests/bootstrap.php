@@ -5,6 +5,9 @@
  * @package YourMark\ImageSizes
  */
 
+// Test code: never run it over HTTP, although it sits in the web root.
+PHP_SAPI === 'cli' || exit;
+
 define( 'WP_TESTS_CONFIG_FILE_PATH', __DIR__ . '/wp-tests-config.php' );
 
 // Some tests make the plugin log on purpose; keep that out of the test output.

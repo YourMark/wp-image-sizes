@@ -11,6 +11,9 @@ use YourMark\ImageSizes\Endpoint;
 use YourMark\ImageSizes\Formats;
 use YourMark\ImageSizes\Sizes;
 
+// Test code: never run it over HTTP, although it sits in the web root.
+PHP_SAPI === 'cli' || exit;
+
 /**
  * Upload, metadata and naming.
  */

@@ -11,6 +11,9 @@ use YourMark\ImageSizes\Endpoint;
 use YourMark\ImageSizes\Health;
 use YourMark\ImageSizes\Urls;
 
+// Test code: never run it over HTTP, although it sits in the web root.
+PHP_SAPI === 'cli' || exit;
+
 /**
  * Pointing missing sizes at PHP on servers that would not pass them on.
  */

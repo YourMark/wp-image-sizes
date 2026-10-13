@@ -10,6 +10,9 @@ namespace YourMark\ImageSizes\Tests;
 use WPAjaxDieContinueException;
 use WPAjaxDieStopException;
 
+// Test code: never run it over HTTP, although it sits in the web root.
+PHP_SAPI === 'cli' || exit;
+
 /**
  * Nonces and capabilities on every AJAX action.
  */

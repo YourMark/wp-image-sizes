@@ -10,6 +10,9 @@ namespace YourMark\ImageSizes\Tests;
 use YourMark\ImageSizes\Endpoint;
 use YourMark\ImageSizes\Pruner;
 
+// Test code: never run it over HTTP, although it sits in the web root.
+PHP_SAPI === 'cli' || exit;
+
 /**
  * Pruning.
  */

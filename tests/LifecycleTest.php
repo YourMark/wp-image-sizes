@@ -12,6 +12,9 @@ use YourMark\ImageSizes\Endpoint;
 use YourMark\ImageSizes\Formats;
 use YourMark\ImageSizes\Sizes;
 
+// Test code: never run it over HTTP, although it sits in the web root.
+PHP_SAPI === 'cli' || exit;
+
 // Core loads its image editors on first use; the test editor below extends one.
 require_once ABSPATH . WPINC . '/class-wp-image-editor.php';
 require_once ABSPATH . WPINC . '/class-wp-image-editor-imagick.php';

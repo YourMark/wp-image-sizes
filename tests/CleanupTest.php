@@ -13,6 +13,9 @@ use YourMark\ImageSizes\Converter;
 use YourMark\ImageSizes\Endpoint;
 use YourMark\ImageSizes\Pruner;
 
+// Test code: never run it over HTTP, although it sits in the web root.
+PHP_SAPI === 'cli' || exit;
+
 /**
  * Sizes made from an old file must not outlive it, and nothing else may go.
  */

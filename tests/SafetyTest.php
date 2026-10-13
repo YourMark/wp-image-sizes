@@ -10,6 +10,9 @@ namespace YourMark\ImageSizes\Tests;
 use YourMark\ImageSizes\Formats;
 use YourMark\ImageSizes\Warmer;
 
+// Test code: never run it over HTTP, although it sits in the web root.
+PHP_SAPI === 'cli' || exit;
+
 /**
  * Animation detection and what the warmer may fetch.
  */

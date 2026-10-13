@@ -9,6 +9,9 @@
  * @package YourMark\ImageSizes
  */
 
+// Test code: never run it over HTTP, although it sits in the web root.
+PHP_SAPI === 'cli' || exit;
+
 /**
  * An environment variable, or a default when it is not set.
  *
