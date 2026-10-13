@@ -48,13 +48,8 @@ final class Converter {
 		$editor->maybe_exif_rotate();
 
 		$directory = dirname( $source );
-		$name      = pathinfo( $source, PATHINFO_FILENAME ) . '.' . wp_get_default_extension_for_mime_type( $target );
-
-		if ( file_exists( "{$directory}/{$name}" ) ) {
-			$name = wp_unique_filename( $directory, $name );
-		}
-
-		$saved = $editor->save( "{$directory}/{$name}", $target );
+		$name      = Formats::unique_name( $directory, pathinfo( $source, PATHINFO_FILENAME ), $target, $source );
+		$saved     = $editor->save( "{$directory}/{$name}", $target );
 
 		if ( is_wp_error( $saved ) ) {
 			return $saved;
@@ -69,11 +64,17 @@ final class Converter {
 		$meta['filesize']       = (int) filesize( $saved['path'] );
 		$meta[ self::PREVIOUS ] = [ ...(array) ( $meta[ self::PREVIOUS ] ?? [] ), basename( $source ) ];
 		$sizes                  = (array) ( $meta['sizes'] ?? [] );
-		$meta['sizes']          = array_filter( $sizes, fn( array $size ): bool => ( $size['mime-type'] ?? '' ) === $target );
+		$registered             = wp_get_registered_image_subsizes();
 
-		// The dropped sizes stay on disk for links in content; recorded, so the clean-up tool can remove them.
-		foreach ( array_diff_key( $sizes, $meta['sizes'] ) as $size ) {
-			Pruner::record( $attachment_id, (string) ( $size['file'] ?? '' ) );
+		// Registered sizes in the old format make way for lazy ones in the new; any other size could not come back, so it stays.
+		$dropped       = array_filter( $sizes, fn( $size, $name ): bool => is_array( $size ) && isset( $registered[ $name ] ) && ( $size['mime-type'] ?? '' ) !== $target, ARRAY_FILTER_USE_BOTH );
+		$meta['sizes'] = array_diff_key( $sizes, $dropped );
+
+		// The dropped files stay on disk for links in content; recorded, so the clean-up tool can remove them.
+		foreach ( $dropped as $size ) {
+			if ( ! empty( $size['file'] ) ) {
+				Pruner::record( $attachment_id, (string) $size['file'] );
+			}
 		}
 
 		update_attached_file( $attachment_id, $saved['path'] );
@@ -128,10 +129,11 @@ final class Converter {
 	/**
 	 * Make every size of an attachment that has no file yet.
 	 *
-	 * @param int $attachment_id Attachment ID.
+	 * @param int  $attachment_id Attachment ID.
+	 * @param bool $retry         Whether to try sizes again that failed in the last ten minutes.
 	 * @return int Number of sizes made.
 	 */
-	public static function make_sizes( int $attachment_id ): int {
+	public static function make_sizes( int $attachment_id, bool $retry = false ): int {
 		$meta = wp_get_attachment_metadata( $attachment_id );
 
 		if ( ! is_array( $meta ) || empty( $meta['file'] ) ) {
@@ -143,10 +145,14 @@ final class Converter {
 		$prefix    = $directory === '.' ? '' : "{$directory}/";
 		$made      = 0;
 
-		foreach ( $meta['sizes'] ?? [] as $size ) {
-			$relative = $prefix . $size['file'];
+		foreach ( (array) ( $meta['sizes'] ?? [] ) as $size ) {
+			if ( ! is_array( $size ) || empty( $size['file'] ) ) {
+				continue;
+			}
 
-			if ( ! file_exists( "{$basedir}/{$relative}" ) && is_array( Generator::make( $relative ) ) ) {
+			$relative = $prefix . basename( (string) $size['file'] );
+
+			if ( ! file_exists( "{$basedir}/{$relative}" ) && is_array( Generator::make( $relative, $retry ) ) ) {
 				++$made;
 			}
 		}

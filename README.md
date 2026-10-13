@@ -13,16 +13,23 @@ Works with any theme. It hooks into core's attachment metadata, so `srcset`,
 1. **Upload:** the original is stored in the chosen format (Settings > Media).
    Every registered size is added to the metadata when it is read, never
    stored. A size registered later works for every existing upload at once.
+   A size in another format than its source carries the source extension
+   (`photo-jpg-300x200.webp`), so `photo.jpg` and `photo.png` in one folder
+   never share size files.
 2. **First request:** WordPress checks that the file name belongs to an image
    of this site, makes the size its metadata lists, sends it and leaves it on
    disk. Nobody can request made-up dimensions: only sizes in the metadata are
    ever made.
    - A name from before a format switch or a change in dimensions gets a 301 to
-     the size that replaced it, so URLs saved in content keep working.
+     the size that replaced it, so URLs saved in content keep working. The 301
+     expires after a day, so switching formats back and forth cannot leave a
+     browser in a redirect loop. The target is made by its own request.
    - At most two images are resized at once (`yourmark/image-sizes/concurrency`);
-     each holds 150 to 350 MB. A request that waits more than ten seconds, or
-     for a size that failed in the last ten minutes, gets a temporary redirect
-     to the nearest size that exists. Failures are logged once per ten minutes.
+     each holds 150 to 350 MB. A request that waits more than ten seconds in all
+     (`yourmark/image-sizes/wait`), or asks for a size that failed in the last
+     ten minutes, gets a temporary redirect to the nearest size that exists.
+     Problems are logged once an hour. The buttons in the admin always retry.
+   - A request through the PHP URL that names no image gets a 404.
 3. **Warming:** saving a published post queues its page; widgets, the
    customiser, template parts and a theme switch queue the front page. A
    minute later a cron job fetches the page and makes each img's `src`, image
@@ -80,7 +87,8 @@ another plugin's crop, is never touched.
 - **Deleting** an attachment also deletes the files this plugin made that the
   metadata no longer lists, such as sizes in a format switched away from.
 - Files made before the plugin kept records (the first versions on a site) are
-  left alone by `prune`.
+  left alone by `prune`. Replacing an image does delete one under its own size
+  name, unless another image in the folder shares that name.
 
 A replacement under the same name keeps the same URLs, so a browser or CDN may
 show the old image until its cache expires. That is no different in core.
@@ -116,10 +124,27 @@ them from the stored metadata: switching the plugin off and running
 `wp media regenerate --only-missing` brings them back. The admin asks before
 deleting; the AJAX endpoint itself trusts any administrator with a valid nonce.
 
+## Tests
+
+Integration tests run on the WordPress test suite, against this site's core in
+`web/wp`, a separate database and a throwaway content directory:
+
+```bash
+cd web/app/mu-plugins/yourmark-image-sizes
+composer install
+mysql -uroot -e 'CREATE DATABASE IF NOT EXISTS yourmark_image_sizes_tests'
+composer test
+```
+
+The database settings default to Herd's (root, no password, 127.0.0.1) and can
+be overridden with `WP_TESTS_DB_NAME`, `WP_TESTS_DB_USER`, `WP_TESTS_DB_PASSWORD`
+and `WP_TESTS_DB_HOST`.
+
 ## Filters
 
 - `yourmark/image-sizes/base`: sizes still made at upload. None by default.
 - `yourmark/image-sizes/concurrency`: images resized at once. Default 2.
+- `yourmark/image-sizes/wait`: seconds a request waits for its turn. Default 10.
 - `yourmark/image-sizes/enabled`: switch lazy sizes off.
 - `yourmark/image-sizes/lock-dir`: where lock files go. Defaults to
   `wp-content/cache/yourmark-image-sizes`; point every site on a server at one

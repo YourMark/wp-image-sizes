@@ -128,12 +128,11 @@ final class Command {
 	/**
 	 * Delete size files that nothing needs.
 	 *
-	 * Removes files no attachment refers to any more, such as sizes in a format
-	 * switched away from. With --stored, also deletes the sizes made at upload;
-	 * each comes back under its old name on its next request.
-	 *
-	 * Size files another plugin made without registering the size look the same
-	 * as orphans. Check a --dry-run first on sites with page builders.
+	 * Removes files this plugin made that no size lists any more, such as sizes
+	 * in a format switched away from. With --stored, also deletes the sizes core
+	 * made at upload, for registered sizes only; they come back on request, and
+	 * a URL to an old name is redirected to the size that replaced it. A file
+	 * neither this plugin nor core made is never touched.
 	 *
 	 * ## OPTIONS
 	 *

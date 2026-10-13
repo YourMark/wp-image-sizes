@@ -236,7 +236,12 @@ final class Warmer {
 			$urls = [];
 
 			foreach ( $xml->sitemap as $sitemap ) {
-				array_push( $urls, ...self::read_sitemap( (string) $sitemap->loc, $depth + 1 ) );
+				$child = (string) $sitemap->loc;
+
+				// The index is read from this site, but what it lists is fetched by the server too.
+				if ( self::is_own_page( $child ) ) {
+					array_push( $urls, ...self::read_sitemap( $child, $depth + 1 ) );
+				}
 			}
 
 			return $urls;

@@ -71,8 +71,12 @@ final class Pruner {
 			}
 		}
 
-		if ( ! $dry_run && $files ) {
-			self::forget( $attachment_id, array_map( 'basename', $files ) );
+		if ( ! $dry_run ) {
+			// Records of files that are gone anyway would otherwise outlive them.
+			$attached = (string) get_attached_file( $attachment_id );
+			$missing  = array_filter( self::made( $attachment_id ), fn( string $file ): bool => ! file_exists( dirname( $attached ) . "/{$file}" ) );
+
+			self::forget( $attachment_id, [ ...array_map( 'basename', $files ), ...$missing ] );
 		}
 
 		return [
@@ -153,11 +157,17 @@ final class Pruner {
 
 		$directory = dirname( $attached );
 		$files     = self::made( $attachment_id );
-		$lazy      = Sizes::add_lazy_sizes( $metadata );
+		$relative  = dirname( (string) ( $metadata['file'] ?? '' ) );
+		$others    = array_diff( Generator::attachments( $relative === '.' ? '' : "{$relative}/", Sizes::stem( $metadata ) ), [ $attachment_id ] );
 
-		foreach ( is_array( $lazy ) ? (array) ( $lazy['sizes'] ?? [] ) : [] as $size ) {
-			if ( ! empty( $size[ Sizes::LAZY ] ) ) {
-				$files[] = (string) $size['file'];
+		// A file under a lazy name that was not recorded, made before the records existed, is only this attachment's when no other shares its name.
+		if ( ! $others ) {
+			$lazy = Sizes::add_lazy_sizes( $metadata );
+
+			foreach ( is_array( $lazy ) ? (array) ( $lazy['sizes'] ?? [] ) : [] as $size ) {
+				if ( ! empty( $size[ Sizes::LAZY ] ) ) {
+					$files[] = (string) $size['file'];
+				}
 			}
 		}
 

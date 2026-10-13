@@ -130,14 +130,8 @@ final class Formats {
 		$editor->maybe_exif_rotate();
 
 		$directory = dirname( $upload['file'] );
-		$name      = pathinfo( $upload['file'], PATHINFO_FILENAME ) . '.' . wp_get_default_extension_for_mime_type( $target );
-
-		// Only when taken: wp_unique_filename() counts the source file as a clash and appends -1.
-		if ( file_exists( "{$directory}/{$name}" ) ) {
-			$name = wp_unique_filename( $directory, $name );
-		}
-
-		$saved = $editor->save( "{$directory}/{$name}", $target );
+		$name      = self::unique_name( $directory, pathinfo( $upload['file'], PATHINFO_FILENAME ), $target, $upload['file'] );
+		$saved     = $editor->save( "{$directory}/{$name}", $target );
 
 		if ( is_wp_error( $saved ) ) {
 			return $upload;
@@ -199,6 +193,54 @@ final class Formats {
 			'image/avif' => 65,
 			default      => $quality,
 		};
+	}
+
+	/**
+	 * File name for an image converted to another format, unique in its directory for every image extension.
+	 *
+	 * Sizes are named after the name without its extension, so photo.webp next
+	 * to photo.jpg would give both the same size files. wp_unique_filename()
+	 * only checks the one extension it is given.
+	 *
+	 * @param string $directory Absolute directory.
+	 * @param string $stem      Wanted name without extension.
+	 * @param string $mime      MIME type of the new file.
+	 * @param string $source    Absolute path of the file being converted, which does not count as a clash.
+	 * @return string File name.
+	 */
+	public static function unique_name( string $directory, string $stem, string $mime, string $source ): string {
+		$extension = wp_get_default_extension_for_mime_type( $mime );
+		$candidate = $stem;
+		$number    = 0;
+
+		while ( self::name_taken( $directory, $candidate, $source ) ) {
+			++$number;
+			$candidate = "{$stem}-{$number}";
+		}
+
+		return "{$candidate}.{$extension}";
+	}
+
+	/**
+	 * Whether an image file, or core's -scaled or -rotated copy of one, already carries a name in any extension.
+	 *
+	 * @param string $directory Absolute directory.
+	 * @param string $stem      Name without extension.
+	 * @param string $source    Path that does not count.
+	 * @return bool
+	 */
+	private static function name_taken( string $directory, string $stem, string $source ): bool {
+		foreach ( [ '', '-scaled', '-rotated' ] as $suffix ) {
+			foreach ( Generator::SOURCE_EXTENSIONS as $extension ) {
+				$path = "{$directory}/{$stem}{$suffix}.{$extension}";
+
+				if ( $path !== $source && file_exists( $path ) ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 	/**

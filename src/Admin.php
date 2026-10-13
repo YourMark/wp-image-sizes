@@ -255,8 +255,9 @@ final class Admin {
 	 */
 	public static function ajax_image(): void {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Checked in authorise().
-		$id   = isset( $_POST['id'] ) ? absint( $_POST['id'] ) : 0;
-		$name = isset( $_POST['size'] ) ? sanitize_key( wp_unslash( $_POST['size'] ) ) : '';
+		$id = isset( $_POST['id'] ) ? absint( $_POST['id'] ) : 0;
+		// Not sanitize_key(): a size registered with capitals would no longer match its key.
+		$name = isset( $_POST['size'] ) ? sanitize_text_field( wp_unslash( $_POST['size'] ) ) : '';
 		// phpcs:enable
 
 		self::authorise( 'upload_files', $id );
@@ -267,7 +268,8 @@ final class Admin {
 
 		if ( $name !== '' ) {
 			$size = self::sizes( $id )[ $name ] ?? null;
-			$made = $size === null ? null : Generator::make( $size['path'] );
+			// Someone asked on purpose, so a failure remembered from a visitor's request is tried again.
+			$made = $size === null ? null : Generator::make( $size['path'], true );
 
 			if ( ! is_array( $made ) ) {
 				$message = is_wp_error( $made ) ? $made->get_error_message() : __( 'This image has no such size.', 'yourmark-image-sizes' );
@@ -283,7 +285,7 @@ final class Admin {
 			wp_send_json_error( [ 'message' => $converted->get_error_message() ], 500 );
 		}
 
-		self::respond( $id, $converted, Converter::make_sizes( $id ) );
+		self::respond( $id, $converted, Converter::make_sizes( $id, true ) );
 	}
 
 	/**

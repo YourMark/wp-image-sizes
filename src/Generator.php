@@ -29,11 +29,6 @@ final class Generator {
 	private const RETRY_AFTER = 600;
 
 	/**
-	 * Seconds a request waits for a free resize slot before it gets a stand-in.
-	 */
-	private const WAIT = 10;
-
-	/**
 	 * Suffixes core adds to an attached file that its sizes do not carry.
 	 */
 	private const ATTACHED_SUFFIXES = [ '', '-scaled', '-rotated' ];
@@ -41,7 +36,7 @@ final class Generator {
 	/**
 	 * Extensions an attached image can have.
 	 */
-	private const SOURCE_EXTENSIONS = [ 'jpg', 'jpeg', 'jpe', 'png', 'webp', 'avif', 'gif', 'heic' ];
+	public const SOURCE_EXTENSIONS = [ 'jpg', 'jpeg', 'jpe', 'png', 'webp', 'avif', 'gif', 'heic' ];
 
 	/**
 	 * Path below the uploads base for a URL or request path in this site's uploads.
@@ -92,9 +87,10 @@ final class Generator {
 	 * What a request for a missing file in uploads should get.
 	 *
 	 * The exact size is made and served. A name from before a format switch or a
-	 * change in dimensions is sent on permanently to the size that replaced it.
-	 * When a size cannot be made right now, a size that exists stands in, on a
-	 * temporary redirect, so the visitor never gets a broken image.
+	 * change in dimensions is sent on to the size that replaced it, which its own
+	 * request then makes. When a size cannot be made right now, a size that
+	 * exists stands in on a temporary redirect, so the visitor never gets a
+	 * broken image.
 	 *
 	 * @param string $relative Path below the uploads base.
 	 * @return array|null Null when the path names no image of this site.
@@ -109,19 +105,19 @@ final class Generator {
 
 		$size = $found['size'];
 
-		if ( is_wp_error( self::ensure( $size ) ) ) {
-			return [
-				'action'    => 'redirect',
-				'url'       => self::stand_in( $size ),
-				'permanent' => false,
-			];
-		}
-
 		if ( ! $found['exact'] ) {
 			return [
 				'action'    => 'redirect',
 				'url'       => $size['url'],
 				'permanent' => true,
+			];
+		}
+
+		if ( is_wp_error( self::ensure( $size, false ) ) ) {
+			return [
+				'action'    => 'redirect',
+				'url'       => self::stand_in( $size ),
+				'permanent' => false,
 			];
 		}
 
@@ -136,17 +132,18 @@ final class Generator {
 	 * Make the size a path names exactly, unless its file already exists.
 	 *
 	 * @param string $relative Path below the uploads base.
+	 * @param bool   $retry    Whether to try again although the size failed in the last ten minutes; for someone asking on purpose.
 	 * @return array|WP_Error|null The size, why it could not be made, or null when the path names no size.
 	 * @phpstan-return Size|WP_Error|null
 	 */
-	public static function make( string $relative ) {
+	public static function make( string $relative, bool $retry = false ) {
 		$found = self::find( $relative );
 
 		if ( $found === null || ! $found['exact'] ) {
 			return null;
 		}
 
-		$made = self::ensure( $found['size'] );
+		$made = self::ensure( $found['size'], $retry );
 
 		return is_wp_error( $made ) ? $made : $found['size'];
 	}
@@ -156,7 +153,9 @@ final class Generator {
 	 *
 	 * The file name only narrows the search to an attachment; what is made is
 	 * decided by its metadata, so a request cannot ask for dimensions nobody
-	 * registered.
+	 * registered. Every candidate is checked for the exact name before any is
+	 * taken as a stand-in, so attachments that share a stem cannot answer for
+	 * each other.
 	 *
 	 * @param string $relative Path below the uploads base.
 	 * @return array|null
@@ -169,24 +168,35 @@ final class Generator {
 
 		[ , $directory, $stem, $width, $height ] = $match;
 		$file                                    = basename( $relative );
+		$candidates                              = [];
 
 		foreach ( self::attachments( $directory, $stem ) as $id ) {
-			$meta  = wp_get_attachment_metadata( $id );
-			$sizes = is_array( $meta ) ? (array) ( $meta['sizes'] ?? [] ) : [];
+			$meta = wp_get_attachment_metadata( $id );
 
-			// The name exactly, else the same name in another format, else the nearest size.
+			$candidates[ $id ] = array_filter(
+				is_array( $meta ) ? (array) ( $meta['sizes'] ?? [] ) : [],
+				fn( $size ): bool => is_array( $size ) && ! empty( $size['file'] ) && ! empty( $size['width'] ) && ! empty( $size['height'] )
+			);
+		}
+
+		foreach ( $candidates as $id => $sizes ) {
 			foreach ( $sizes as $name => $size ) {
-				if ( ( $size['file'] ?? '' ) === $file ) {
+				if ( $size['file'] === $file ) {
 					return self::found( $id, (string) $name, $size, true );
 				}
 			}
+		}
 
+		// The same name in another format: a URL saved before a format switch.
+		foreach ( $candidates as $id => $sizes ) {
 			foreach ( $sizes as $name => $size ) {
-				if ( pathinfo( (string) ( $size['file'] ?? '' ), PATHINFO_FILENAME ) === pathinfo( $file, PATHINFO_FILENAME ) ) {
+				if ( pathinfo( (string) $size['file'], PATHINFO_FILENAME ) === pathinfo( $file, PATHINFO_FILENAME ) ) {
 					return self::found( $id, (string) $name, $size, false );
 				}
 			}
+		}
 
+		foreach ( $candidates as $id => $sizes ) {
 			$nearest = self::nearest( $sizes, (int) $width, (int) $height );
 
 			if ( $nearest !== null ) {
@@ -198,29 +208,41 @@ final class Generator {
 	}
 
 	/**
-	 * Attachments whose sizes carry a stem: the stem's own file, or its -scaled or -rotated copy.
+	 * Attachments whose sizes can carry a stem, oldest first.
 	 *
-	 * Exact names rather than a LIKE, so a request for a made-up name costs one indexed lookup.
+	 * The stem's own file, or its -scaled or -rotated copy, in any image
+	 * extension. A stem that ends in a source extension, as lazy sizes in
+	 * another format do (photo-jpg), is looked up without it as well. Exact
+	 * names rather than a LIKE: the lookup reads only _wp_attached_file rows and
+	 * never misses the right attachment behind a row limit.
 	 *
 	 * @param string $directory Directory below the uploads base, with a trailing slash or empty.
 	 * @param string $stem      Name the sizes carry.
 	 * @return int[]
 	 */
-	private static function attachments( string $directory, string $stem ): array {
+	public static function attachments( string $directory, string $stem ): array {
 		global $wpdb;
+
+		$stems = [ $stem ];
+
+		if ( preg_match( '/^(.+)-(?:' . implode( '|', self::SOURCE_EXTENSIONS ) . ')$/i', $stem, $match ) ) {
+			$stems[] = $match[1];
+		}
 
 		$names = [];
 
-		foreach ( self::ATTACHED_SUFFIXES as $suffix ) {
-			foreach ( self::SOURCE_EXTENSIONS as $extension ) {
-				$names[] = "{$directory}{$stem}{$suffix}.{$extension}";
+		foreach ( $stems as $candidate ) {
+			foreach ( self::ATTACHED_SUFFIXES as $suffix ) {
+				foreach ( self::SOURCE_EXTENSIONS as $extension ) {
+					$names[] = "{$directory}{$candidate}{$suffix}.{$extension}";
+				}
 			}
 		}
 
 		$placeholders = implode( ',', array_fill( 0, count( $names ), '%s' ) );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- No API finds an attachment by file name; the placeholders are built above.
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value IN ({$placeholders}) LIMIT 5", $names ) );
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value IN ({$placeholders}) ORDER BY post_id LIMIT 10", $names ) );
 
 		return array_map( 'intval', $ids );
 	}
@@ -228,13 +250,13 @@ final class Generator {
 	/**
 	 * The size closest to requested dimensions: same shape first, then the smallest that is wide enough.
 	 *
-	 * @param array<string, array<string, mixed>> $sizes  Metadata sizes.
+	 * @param array<string, array<string, mixed>> $sizes  Metadata sizes with width and height.
 	 * @param int                                 $width  Requested width.
 	 * @param int                                 $height Requested height.
 	 * @return string|null Size name.
 	 */
 	private static function nearest( array $sizes, int $width, int $height ): ?string {
-		$candidates = array_filter( $sizes, fn( array $size ): bool => ! empty( $size['width'] ) && ! empty( $size['height'] ) );
+		$candidates = array_filter( $sizes, fn( $size ): bool => is_array( $size ) && ! empty( $size['width'] ) && ! empty( $size['height'] ) );
 
 		if ( ! $candidates ) {
 			return null;
@@ -267,7 +289,7 @@ final class Generator {
 	 */
 	private static function found( int $attachment_id, string $name, array $size, bool $exact ): array {
 		$source = (string) get_attached_file( $attachment_id );
-		$file   = (string) $size['file'];
+		$file   = basename( (string) $size['file'] );
 
 		return [
 			'size'  => [
@@ -275,7 +297,7 @@ final class Generator {
 				'width'      => (int) $size['width'],
 				'height'     => (int) $size['height'],
 				'crop'       => self::registered_crop( $attachment_id, $name, (int) $size['width'], (int) $size['height'] ),
-				'mime'       => $size['mime-type'] ?? (string) wp_check_filetype( $file )['type'],
+				'mime'       => (string) ( $size['mime-type'] ?? wp_check_filetype( $file )['type'] ),
 				'file'       => $file,
 				'url'        => dirname( (string) wp_get_attachment_url( $attachment_id ) ) . "/{$file}",
 				'source'     => $source,
@@ -317,16 +339,22 @@ final class Generator {
 	/**
 	 * Make a size's file unless it exists, remembering a failure for a while.
 	 *
-	 * @param array $size Size from find().
+	 * @param array $size  Size from find().
+	 * @param bool  $retry Whether to ignore a remembered failure.
 	 * @phpstan-param Size $size
 	 * @return true|WP_Error
 	 */
-	private static function ensure( array $size ) {
+	private static function ensure( array $size, bool $retry ) {
 		if ( file_exists( $size['target'] ) ) {
 			return true;
 		}
 
-		$key    = self::FAILED . md5( $size['target'] );
+		$key = self::FAILED . md5( $size['target'] );
+
+		if ( $retry ) {
+			delete_transient( $key );
+		}
+
 		$failed = get_transient( $key );
 
 		if ( is_string( $failed ) ) {
@@ -338,9 +366,7 @@ final class Generator {
 		// A busy server is no fault of the image: the next request simply tries again.
 		if ( is_wp_error( $made ) && $made->get_error_code() !== 'yourmark_image_sizes_busy' ) {
 			set_transient( $key, $made->get_error_message(), self::RETRY_AFTER );
-
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- A failure in production needs a trace; the transient keeps it to once per ten minutes.
-			error_log( "YourMark image sizes: could not make {$size['file']}: {$made->get_error_message()}" );
+			self::log( "could not make {$size['file']}: {$made->get_error_message()}" );
 		}
 
 		return $made;
@@ -358,39 +384,50 @@ final class Generator {
 		$directory = dirname( $size['source'] );
 		$made      = array_filter(
 			is_array( $meta ) ? (array) ( $meta['sizes'] ?? [] ) : [],
-			fn( array $entry ): bool => isset( $entry['file'] ) && file_exists( "{$directory}/{$entry['file']}" )
+			fn( $entry ): bool => is_array( $entry ) && ! empty( $entry['file'] ) && file_exists( $directory . '/' . basename( (string) $entry['file'] ) )
 		);
 		$nearest   = self::nearest( $made, $size['width'], $size['height'] );
 
 		return $nearest === null
 			? (string) wp_get_attachment_url( $size['attachment'] )
-			: dirname( $size['url'] ) . '/' . $made[ $nearest ]['file'];
+			: dirname( $size['url'] ) . '/' . basename( (string) $made[ $nearest ]['file'] );
 	}
 
 	/**
 	 * Resize the attachment's file to a size and save it under the size's name.
 	 *
-	 * Resizes from the attached file, which core has already scaled down to its
-	 * big-image threshold.
+	 * One deadline covers both waits: for another request making the same file,
+	 * and for a resize slot. Without it, a queue of requests for one file would
+	 * each wait in turn and tie up PHP workers.
 	 *
 	 * @param array $size Size from find().
 	 * @phpstan-param Size $size
 	 * @return true|WP_Error
 	 */
 	private static function generate( array $size ) {
-		// A page full of new images asks for several sizes of one file at once; the rest wait for the first.
+		/**
+		 * Filters how many seconds a request waits, for the file and a resize slot together, before it gets a stand-in.
+		 *
+		 * @param int $seconds Seconds.
+		 */
+		$deadline  = microtime( true ) + max( 0, (int) apply_filters( 'yourmark/image-sizes/wait', 10 ) );
 		$lock_path = self::lock_dir() . md5( $size['target'] ) . '.lock';
-		$file_lock = self::lock( $lock_path, true );
+		$file_lock = self::acquire( [ $lock_path ], $deadline );
+
+		if ( $file_lock === 'busy' ) {
+			return self::busy();
+		}
 
 		try {
+			// Another request may have made it while this one waited.
 			if ( file_exists( $size['target'] ) ) {
 				return true;
 			}
 
-			$slot = self::slot();
+			$slot = self::acquire( self::slot_paths(), $deadline );
 
-			if ( $slot === null ) {
-				return new WP_Error( 'yourmark_image_sizes_busy', 'Every resize slot is taken.' );
+			if ( $slot === 'busy' ) {
+				return self::busy();
 			}
 
 			try {
@@ -401,8 +438,10 @@ final class Generator {
 		} finally {
 			self::release( $file_lock );
 
-			// Safe once the file is in place: a request that still opens the old lock finds the file and stops.
-			wp_delete_file( $lock_path );
+			// Only once the file exists: a request still waiting on this lock then finds it and stops.
+			if ( file_exists( $size['target'] ) ) {
+				wp_delete_file( $lock_path );
+			}
 		}
 	}
 
@@ -480,27 +519,59 @@ final class Generator {
 	}
 
 	/**
-	 * Wait for one of a few server-wide resize slots.
+	 * The error for a request that found every slot taken until its deadline.
+	 *
+	 * @return WP_Error
+	 */
+	private static function busy(): WP_Error {
+		return new WP_Error( 'yourmark_image_sizes_busy', 'Every resize slot is taken.' );
+	}
+
+	/**
+	 * Lock files for the resize slots.
 	 *
 	 * Each resize holds 150 to 350 MB outside PHP's memory limit, so a page of
 	 * new images must not start them all at once.
 	 *
-	 * @return resource|null Null when none came free in time.
+	 * @return string[]
 	 */
-	private static function slot() {
+	private static function slot_paths(): array {
 		/**
 		 * Filters how many images this server resizes at once.
 		 *
 		 * @param int $slots Concurrent resizes.
 		 */
-		$slots    = max( 1, (int) apply_filters( 'yourmark/image-sizes/concurrency', 2 ) );
-		$deadline = microtime( true ) + self::WAIT;
+		$slots = max( 1, (int) apply_filters( 'yourmark/image-sizes/concurrency', 2 ) );
+
+		return array_map( fn( int $i ): string => self::lock_dir() . "slot-{$i}.lock", range( 0, $slots - 1 ) );
+	}
+
+	/**
+	 * Take the first of some locks that comes free before a deadline.
+	 *
+	 * A lock that cannot be opened at all, say in a directory that is not
+	 * writable, is not a reason to stop making images: the work goes ahead
+	 * unlocked and the problem is logged.
+	 *
+	 * @param string[] $paths    Lock files, created when missing.
+	 * @param float    $deadline Microtime to give up at.
+	 * @return resource|'busy'|null A held lock; busy when all stayed taken; null when none could be opened.
+	 */
+	private static function acquire( array $paths, float $deadline ) {
+		$handles = array_filter( array_map( [ self::class, 'open' ], $paths ) );
+
+		if ( ! $handles ) {
+			self::log( 'cannot open lock files in ' . self::lock_dir() . '; images are resized without a limit.' );
+
+			return null;
+		}
 
 		do {
-			for ( $i = 0; $i < $slots; $i++ ) {
-				$handle = self::lock( self::lock_dir() . "slot-{$i}.lock", false );
+			foreach ( $handles as $index => $handle ) {
+				if ( flock( $handle, LOCK_EX | LOCK_NB ) ) {
+					unset( $handles[ $index ] );
+					array_walk( $handles, [ self::class, 'close' ] );
 
-				if ( $handle ) {
 					return $handle;
 				}
 			}
@@ -508,7 +579,63 @@ final class Generator {
 			usleep( 100000 );
 		} while ( microtime( true ) < $deadline );
 
-		return null;
+		array_walk( $handles, [ self::class, 'close' ] );
+
+		return 'busy';
+	}
+
+	/**
+	 * Open a lock file without a warning when it cannot be.
+	 *
+	 * A warning would land in the image response under WP_DEBUG_DISPLAY.
+	 *
+	 * @param string $path Lock file.
+	 * @return resource|null
+	 */
+	private static function open( string $path ) {
+		// Another site user's lock file can only be read, which is enough for flock().
+		// phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- Checks before the native fopen() below.
+		if ( is_file( $path ) ) {
+			$mode = is_writable( $path ) ? 'c' : 'r';
+		} else {
+			$mode = is_writable( dirname( $path ) ) ? 'c' : '';
+		}
+		// phpcs:enable
+
+		if ( $mode === '' || ( $mode === 'r' && ! is_readable( $path ) ) ) {
+			return null;
+		}
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- flock() needs a native handle.
+		$handle = fopen( $path, $mode );
+
+		return $handle ? $handle : null;
+	}
+
+	/**
+	 * Close a lock file that was opened but not taken.
+	 *
+	 * @param resource $handle Lock handle.
+	 * @return void
+	 */
+	private static function close( $handle ): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Pairs with the fopen() in open().
+		fclose( $handle );
+	}
+
+	/**
+	 * Release a lock from acquire().
+	 *
+	 * @param resource|null $handle Lock handle, or null when work went ahead unlocked.
+	 * @return void
+	 */
+	private static function release( $handle ): void {
+		if ( ! $handle ) {
+			return;
+		}
+
+		flock( $handle, LOCK_UN );
+		self::close( $handle );
 	}
 
 	/**
@@ -535,52 +662,21 @@ final class Generator {
 	}
 
 	/**
-	 * Take an exclusive lock on a file.
+	 * Log a problem, once an hour per message.
 	 *
-	 * @param string $path Lock file, created when missing.
-	 * @param bool   $wait Whether to wait for it.
-	 * @return resource|null Null when the lock is taken and $wait is false, or the file cannot be opened.
-	 */
-	private static function lock( string $path, bool $wait ) {
-		// Another site user's lock file can only be read, which is enough for flock(). Checked first, so fopen() never warns into an image response.
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- Pairs with the native fopen() below.
-		$mode = is_file( $path ) ? ( is_writable( $path ) ? 'c' : 'r' ) : 'c';
-
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- As above.
-		if ( ( $mode === 'c' && ! is_writable( dirname( $path ) ) && ! is_file( $path ) ) || ( $mode === 'r' && ! is_readable( $path ) ) ) {
-			return null;
-		}
-
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- flock() needs a native handle.
-		$handle = fopen( $path, $mode );
-
-		if ( ! $handle ) {
-			return null;
-		}
-
-		if ( flock( $handle, $wait ? LOCK_EX : LOCK_EX | LOCK_NB ) ) {
-			return $handle;
-		}
-
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Pairs with the fopen() above.
-		fclose( $handle );
-
-		return null;
-	}
-
-	/**
-	 * Release a lock from lock().
-	 *
-	 * @param resource|null $handle Lock handle.
+	 * @param string $message What went wrong.
 	 * @return void
 	 */
-	private static function release( $handle ): void {
-		if ( ! $handle ) {
+	private static function log( string $message ): void {
+		$key = 'yourmark_image_sizes_logged_' . md5( $message );
+
+		if ( get_transient( $key ) ) {
 			return;
 		}
 
-		flock( $handle, LOCK_UN );
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Pairs with the fopen() in lock().
-		fclose( $handle );
+		set_transient( $key, 1, HOUR_IN_SECONDS );
+
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- A failure in production needs a trace; the transient above keeps it to once an hour.
+		error_log( "YourMark image sizes: {$message}" );
 	}
 }

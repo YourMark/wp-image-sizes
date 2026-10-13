@@ -22,6 +22,11 @@ final class Sizes {
 	public const LAZY = 'yourmark_lazy';
 
 	/**
+	 * Metadata key set on an animated upload, read once when its metadata is made.
+	 */
+	public const ANIMATED = 'yourmark_animated';
+
+	/**
 	 * Formats made lazily. GIF stays out: resizing one drops its animation.
 	 */
 	private const RESIZABLE = [ 'image/jpeg', 'image/png', 'image/webp', 'image/avif' ];
@@ -33,6 +38,7 @@ final class Sizes {
 	 */
 	public static function register(): void {
 		add_filter( 'intermediate_image_sizes_advanced', [ self::class, 'keep_base_sizes' ], 10, 2 );
+		add_filter( 'wp_generate_attachment_metadata', [ self::class, 'mark_animated' ], 5, 2 );
 		add_filter( 'wp_get_attachment_metadata', [ self::class, 'add_lazy_sizes' ] );
 		add_filter( 'wp_update_attachment_metadata', [ self::class, 'remove_lazy_sizes' ] );
 	}
@@ -86,6 +92,44 @@ final class Sizes {
 	}
 
 	/**
+	 * File name without extension that an upload's lazy sizes are named after.
+	 *
+	 * When a size changes format, the source extension joins the name:
+	 * photo.jpg and photo.png in one folder would otherwise both get
+	 * photo-300x200.webp, and one would show the other's picture.
+	 *
+	 * @param array<string, mixed> $data        Attachment metadata.
+	 * @param string               $mime        Source MIME type.
+	 * @param string               $output_mime MIME type the sizes are written in.
+	 * @return string
+	 */
+	public static function lazy_stem( array $data, string $mime, string $output_mime ): string {
+		$stem = self::stem( $data );
+
+		return $mime === $output_mime ? $stem : $stem . '-' . strtolower( pathinfo( (string) $data['file'], PATHINFO_EXTENSION ) );
+	}
+
+	/**
+	 * Note in the metadata that an upload is animated, so its sizes keep its format.
+	 *
+	 * Read once here rather than on every metadata read: telling an animation
+	 * apart means opening the file.
+	 *
+	 * @param mixed $metadata      New attachment metadata.
+	 * @param int   $attachment_id Attachment ID.
+	 * @return mixed
+	 */
+	public static function mark_animated( $metadata, int $attachment_id ) {
+		$file = (string) get_attached_file( $attachment_id );
+
+		if ( is_array( $metadata ) && $file !== '' && Formats::is_animated( $file, (string) get_post_mime_type( $attachment_id ) ) ) {
+			$metadata[ self::ANIMATED ] = true;
+		}
+
+		return $metadata;
+	}
+
+	/**
 	 * Make only the base sizes at upload.
 	 *
 	 * The block editor's client-side processing asks wp_get_missing_image_subsizes()
@@ -121,9 +165,10 @@ final class Sizes {
 			return $data;
 		}
 
-		$output_mime = wp_get_image_editor_output_format( $data['file'], $mime )[ $mime ] ?? $mime;
+		// An animation keeps its format: converting keeps only the first frame.
+		$output_mime = empty( $data[ self::ANIMATED ] ) ? ( wp_get_image_editor_output_format( $data['file'], $mime )[ $mime ] ?? $mime ) : $mime;
 		$extension   = wp_get_default_extension_for_mime_type( $output_mime );
-		$stem        = self::stem( $data );
+		$stem        = self::lazy_stem( $data, $mime, $output_mime );
 		$base        = self::base();
 
 		if ( ! isset( $data['sizes'] ) || ! is_array( $data['sizes'] ) ) {
