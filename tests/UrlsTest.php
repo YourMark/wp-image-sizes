@@ -8,6 +8,7 @@
 namespace YourMark\ImageSizes\Tests;
 
 use YourMark\ImageSizes\Endpoint;
+use YourMark\ImageSizes\Generator;
 use YourMark\ImageSizes\Health;
 use YourMark\ImageSizes\Urls;
 
@@ -54,6 +55,11 @@ final class UrlsTest extends TestCase {
 		$this->routing( false );
 
 		$this->assertSame( $url, Urls::url( $url ) );
+	}
+
+	public function test_the_server_test_asks_for_a_name_the_server_rule_passes_on(): void {
+		$this->assertTrue( Generator::looks_like_size( Health::PROBE ) );
+		$this->assertMatchesRegularExpression( '/-\d+x\d+\.(?:avif|jpe?g|png|webp)$/i', Health::PROBE, 'The README rule matches it.' );
 	}
 
 	public function test_the_server_test_result_reaches_site_health(): void {

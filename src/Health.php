@@ -18,8 +18,11 @@ final class Health {
 
 	/**
 	 * File in the uploads root that only this plugin answers.
+	 *
+	 * Named like a size, so a server rule that sends only size names to
+	 * WordPress passes the test too.
 	 */
-	public const PROBE = 'yourmark-image-sizes-probe.webp';
+	public const PROBE = 'yourmark-image-sizes-probe-1x1.webp';
 
 	/**
 	 * Option holding the last result: ok and checked, a timestamp.
