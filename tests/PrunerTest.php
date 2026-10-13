@@ -42,14 +42,11 @@ final class PrunerTest extends TestCase {
 		$response = Endpoint::respond( $this->uri( $id, 'red-300x225.jpg' ) );
 
 		$this->assertSame( 301, $response['status'] );
-		$this->assertStringEndsWith( '/red-jpg-300x225.webp', $response['headers']['Location'] );
+		$this->assertStringEndsWith( '/red--jpg-300x225.webp', $response['headers']['Location'] );
 	}
 
 	public function test_a_stored_registered_size_is_pruned_forgotten_and_made_again_on_request(): void {
-		$base = fn(): array => [ 'medium' ];
-		add_filter( 'yourmark/image-sizes/base', $base );
-		$id   = $this->upload( $this->image( 'red.jpg' ) );
-		remove_filter( 'yourmark/image-sizes/base', $base );
+		$id = $this->upload_with_stored_medium( 'red.jpg' );
 
 		$this->assertFileExists( $this->path( $id, 'red-300x225.webp' ) );
 
@@ -81,20 +78,14 @@ final class PrunerTest extends TestCase {
 	}
 
 	public function test_the_site_icon_is_never_pruned(): void {
-		$base = fn(): array => [ 'medium' ];
-		add_filter( 'yourmark/image-sizes/base', $base );
-		$id   = $this->upload( $this->image( 'icon.png', 'red', 512, 512 ) );
-		remove_filter( 'yourmark/image-sizes/base', $base );
+		$id = $this->upload_with_stored_medium( 'icon.png', 512, 512 );
 		update_option( 'site_icon', $id );
 
 		$this->assertSame( [], Pruner::prune( $id, true, false )['files'] );
 	}
 
 	public function test_a_dry_run_deletes_nothing(): void {
-		$base = fn(): array => [ 'medium' ];
-		add_filter( 'yourmark/image-sizes/base', $base );
-		$id   = $this->upload( $this->image( 'red.jpg' ) );
-		remove_filter( 'yourmark/image-sizes/base', $base );
+		$id = $this->upload_with_stored_medium( 'red.jpg' );
 
 		$this->assertCount( 1, Pruner::prune( $id, true, true )['files'] );
 		$this->assertFileExists( $this->path( $id, 'red-300x225.webp' ) );
@@ -108,5 +99,31 @@ final class PrunerTest extends TestCase {
 		Pruner::prune( $id, false, false );
 
 		$this->assertSame( [], Pruner::made( $id ) );
+	}
+
+	public function test_a_file_still_listed_as_a_size_is_not_pruned_although_it_was_recorded(): void {
+		$id   = $this->upload( $this->image( 'red.jpg' ) );
+		$file = $this->size_file( $id, 'medium' );
+		Endpoint::respond( $this->uri( $id, $file ) );
+
+		$this->assertSame( [], Pruner::prune( $id, false, false )['files'] );
+		$this->assertFileExists( $this->path( $id, $file ) );
+	}
+
+	/**
+	 * Upload with core making the medium size at upload, as before this plugin.
+	 *
+	 * @param string $name   File name.
+	 * @param int    $width  Width.
+	 * @param int    $height Height.
+	 * @return int Attachment ID.
+	 */
+	private function upload_with_stored_medium( string $name, int $width = 1200, int $height = 900 ): int {
+		$base = fn(): array => [ 'medium' ];
+		add_filter( 'yourmark/image-sizes/base', $base );
+		$id   = $this->upload( $this->image( $name, 'red', $width, $height ) );
+		remove_filter( 'yourmark/image-sizes/base', $base );
+
+		return $id;
 	}
 }

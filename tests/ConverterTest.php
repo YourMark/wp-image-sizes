@@ -8,6 +8,7 @@
 namespace YourMark\ImageSizes\Tests;
 
 use YourMark\ImageSizes\Converter;
+use YourMark\ImageSizes\Formats;
 use YourMark\ImageSizes\Pruner;
 
 /**
@@ -22,8 +23,7 @@ final class ConverterTest extends TestCase {
 		$id   = $this->upload( $this->image( 'red.jpg' ) );
 		remove_filter( 'yourmark/image-sizes/base', $base );
 
-		$custom = $this->path( $id, 'red-123x92.jpg' );
-		copy( (string) get_attached_file( $id ), $custom );
+		copy( (string) get_attached_file( $id ), $this->path( $id, 'red-123x92.jpg' ) );
 		$meta                    = wp_get_attachment_metadata( $id, true );
 		$meta['sizes']['custom'] = [
 			'file'      => 'red-123x92.jpg',
@@ -41,7 +41,7 @@ final class ConverterTest extends TestCase {
 		$this->assertSame( 'image/webp', get_post_mime_type( $id ) );
 		$this->assertSame( 'red.webp', basename( (string) get_attached_file( $id ) ) );
 		$this->assertFileExists( $this->path( $id, 'red.jpg' ), 'The old file stays for links in content.' );
-		$this->assertSame( [ 'red.jpg' ], $meta[ Converter::PREVIOUS ] );
+		$this->assertSame( [ $this->relative( $id, 'red.jpg' ) ], get_post_meta( $id, Converter::PREVIOUS, false ) );
 		$this->assertArrayNotHasKey( 'medium', $meta['sizes'], 'A registered size makes way for a lazy one.' );
 		$this->assertArrayHasKey( 'custom', $meta['sizes'], 'An unregistered size could not come back, so it stays.' );
 		$this->assertSame( [ 'red-300x225.jpg' ], Pruner::made( $id ) );
@@ -63,19 +63,22 @@ final class ConverterTest extends TestCase {
 		update_option( 'yourmark_image_format', 'original' );
 		$icon     = $this->upload( $this->image( 'icon.png', 'red', 512, 512 ) );
 		$gif      = $this->upload( $this->image( 'still.gif' ) );
-		$animated = $this->upload( $this->animated_webp( 'moving.webp' ) );
+		$animated = $this->upload( $this->animated_png( 'moving.png' ) );
 		update_option( 'site_icon', $icon );
 
 		update_option( 'yourmark_image_format', 'webp' );
 		$this->assertSame( 'current', Converter::skip_reason( $current ) );
 		$this->assertSame( 'icon', Converter::skip_reason( $icon ) );
 		$this->assertSame( 'type', Converter::skip_reason( $gif ) );
-
-		if ( \YourMark\ImageSizes\Formats::supports( 'image/avif' ) ) {
-			update_option( 'yourmark_image_format', 'avif' );
-			$this->assertSame( 'animated', Converter::skip_reason( $animated ) );
-		}
-
+		$this->assertSame( 'animated', Converter::skip_reason( $animated ) );
 		$this->assertFalse( Converter::convert( $icon ) );
+		$this->assertFalse( Converter::convert( $animated ) );
+	}
+
+	public function test_an_animated_upload_is_not_converted_on_upload(): void {
+		$id = $this->upload( $this->animated_png( 'moving.png' ) );
+
+		$this->assertTrue( Formats::is_animated( (string) get_attached_file( $id ), 'image/png' ) );
+		$this->assertSame( 'moving.png', basename( (string) get_attached_file( $id ) ) );
 	}
 }

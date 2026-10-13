@@ -41,6 +41,42 @@ abstract class TestCase extends WP_UnitTestCase {
 
 		$this->empty_uploads();
 		update_option( 'yourmark_image_format', 'webp' );
+		$this->routing( true );
+	}
+
+	/**
+	 * Set what the server test found: whether a request for a missing file reaches WordPress.
+	 *
+	 * @param bool $direct True for the usual server, false for one that answers missing files itself.
+	 * @return void
+	 */
+	protected function routing( bool $direct ): void {
+		update_option(
+			'yourmark_image_sizes_routing',
+			[
+				'ok'      => $direct,
+				'checked' => time(),
+			]
+		);
+	}
+
+	/**
+	 * Write a PNG with an acTL chunk, which is all that makes a PNG animated.
+	 *
+	 * ImageMagick cannot write an animated PNG, so the chunk is put in by hand.
+	 *
+	 * @param string $name File name.
+	 * @return string Absolute path.
+	 */
+	protected function animated_png( string $name ): string {
+		$png  = (string) file_get_contents( $this->image( "still-{$name}", 'red', 400, 300 ) );
+		$data = pack( 'NN', 2, 0 );
+		$actl = pack( 'N', strlen( $data ) ) . 'acTL' . $data . pack( 'N', crc32( 'acTL' . $data ) );
+
+		// After the signature (8 bytes) and the IHDR chunk (25 bytes), before any image data.
+		file_put_contents( "{$this->fixtures}/{$name}", substr( $png, 0, 33 ) . $actl . substr( $png, 33 ) );
+
+		return "{$this->fixtures}/{$name}";
 	}
 
 	/**
