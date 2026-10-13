@@ -36,6 +36,13 @@ final class Formats {
 	private const CONVERTIBLE = [ 'image/jpeg', 'image/png', 'image/webp' ];
 
 	/**
+	 * Whether core's image editor is saving an edit, which must keep the format core asked for.
+	 *
+	 * @var bool
+	 */
+	private static bool $saving_edit = false;
+
+	/**
 	 * Hook in.
 	 *
 	 * @return void
@@ -44,6 +51,35 @@ final class Formats {
 		add_filter( 'wp_handle_upload', [ self::class, 'convert_upload' ] );
 		add_filter( 'image_editor_output_format', [ self::class, 'output_format' ], 10, 3 );
 		add_filter( 'wp_editor_set_quality', [ self::class, 'quality' ], 10, 2 );
+		add_filter( 'wp_save_image_editor_file', [ self::class, 'save_edit' ], 10, 4 );
+	}
+
+	/**
+	 * Save an image edited in the media library in the format core named it in.
+	 *
+	 * Core's wp_save_image() works out the new file name, lets the editor
+	 * save, and then points the attachment at that name without reading back
+	 * what was written. The output-format mapping would have saved photo-e123.jpg as
+	 * .webp, leaving the attachment pointing at a file that does not exist.
+	 *
+	 * @param mixed  $override  A result another plugin already saved, or null.
+	 * @param string $filename  Path core will point the attachment at.
+	 * @param mixed  $image     The image editor holding the edit.
+	 * @param string $mime_type MIME type core asked for.
+	 * @return mixed
+	 */
+	public static function save_edit( $override, string $filename, $image, string $mime_type ) {
+		if ( $override !== null || ! $image instanceof \WP_Image_Editor ) {
+			return $override;
+		}
+
+		self::$saving_edit = true;
+
+		try {
+			return $image->save( $filename, $mime_type );
+		} finally {
+			self::$saving_edit = false;
+		}
 	}
 
 	/**
@@ -59,7 +95,10 @@ final class Formats {
 			$format = 'webp';
 		}
 
-		return self::CHOICES[ $format ] ?? null;
+		// One that cannot write WebP either keeps the uploaded format, rather than failing every size.
+		$mime = self::CHOICES[ $format ] ?? null;
+
+		return $mime !== null && self::supports( $mime ) ? $mime : null;
 	}
 
 	/**
@@ -84,9 +123,12 @@ final class Formats {
 	public static function supports( string $mime ): bool {
 		static $supports = [];
 
-		$supports[ $mime ] ??= wp_image_editor_supports( [ 'mime_type' => $mime ] );
+		// Keyed by the editor list too, so a plugin that changes the editors is not answered from before.
+		$key = $mime . '|' . implode( ',', (array) apply_filters( 'wp_image_editors', [ 'WP_Image_Editor_Imagick', 'WP_Image_Editor_GD' ] ) );
 
-		return $supports[ $mime ];
+		$supports[ $key ] ??= wp_image_editor_supports( [ 'mime_type' => $mime ] );
+
+		return $supports[ $key ];
 	}
 
 	/**
@@ -130,7 +172,7 @@ final class Formats {
 		$editor->maybe_exif_rotate();
 
 		$directory = dirname( $upload['file'] );
-		$name      = self::unique_name( $directory, pathinfo( $upload['file'], PATHINFO_FILENAME ), $target, $upload['file'] );
+		$name      = self::unique_name( $directory, pathinfo( $upload['file'], PATHINFO_FILENAME ), $target, [ $upload['file'] ] );
 		$saved     = $editor->save( "{$directory}/{$name}", $target );
 
 		if ( is_wp_error( $saved ) ) {
@@ -160,7 +202,7 @@ final class Formats {
 	public static function output_format( array $formats, $filename = null, $mime = null ): array {
 		$target = self::target();
 
-		if ( $target === null || self::is_site_icon_request() ) {
+		if ( $target === null || self::$saving_edit || self::is_site_icon_request() ) {
 			return $formats;
 		}
 
@@ -198,22 +240,23 @@ final class Formats {
 	/**
 	 * File name for an image converted to another format, unique in its directory for every image extension.
 	 *
-	 * Sizes are named after the name without its extension, so photo.webp next
-	 * to photo.jpg would give both the same size files. wp_unique_filename()
-	 * only checks the one extension it is given.
+	 * Sizes are named after the name without its extension, and without core's
+	 * -scaled or -rotated, so photo.webp next to photo.jpg, or photo-scaled.webp
+	 * next to an unrelated photo.webp, would share size files.
+	 * wp_unique_filename() only checks the one extension it is given.
 	 *
-	 * @param string $directory Absolute directory.
-	 * @param string $stem      Wanted name without extension.
-	 * @param string $mime      MIME type of the new file.
-	 * @param string $source    Absolute path of the file being converted, which does not count as a clash.
+	 * @param string   $directory Absolute directory.
+	 * @param string   $stem      Wanted name without extension.
+	 * @param string   $mime      MIME type of the new file.
+	 * @param string[] $own       Absolute paths of the image's own files, such as the one being converted, which do not count as a clash.
 	 * @return string File name.
 	 */
-	public static function unique_name( string $directory, string $stem, string $mime, string $source ): string {
+	public static function unique_name( string $directory, string $stem, string $mime, array $own ): string {
 		$extension = wp_get_default_extension_for_mime_type( $mime );
 		$candidate = $stem;
 		$number    = 0;
 
-		while ( self::name_taken( $directory, $candidate, $source ) ) {
+		while ( self::name_taken( $directory, $candidate, $own ) || self::name_taken( $directory, Sizes::stem( [ 'file' => $candidate ] ), $own ) ) {
 			++$number;
 			$candidate = "{$stem}-{$number}";
 		}
@@ -224,17 +267,17 @@ final class Formats {
 	/**
 	 * Whether an image file, or core's -scaled or -rotated copy of one, already carries a name in any extension.
 	 *
-	 * @param string $directory Absolute directory.
-	 * @param string $stem      Name without extension.
-	 * @param string $source    Path that does not count.
+	 * @param string   $directory Absolute directory.
+	 * @param string   $stem      Name without extension.
+	 * @param string[] $own       Paths that do not count.
 	 * @return bool
 	 */
-	private static function name_taken( string $directory, string $stem, string $source ): bool {
+	private static function name_taken( string $directory, string $stem, array $own ): bool {
 		foreach ( [ '', '-scaled', '-rotated' ] as $suffix ) {
 			foreach ( Generator::SOURCE_EXTENSIONS as $extension ) {
 				$path = "{$directory}/{$stem}{$suffix}.{$extension}";
 
-				if ( $path !== $source && file_exists( $path ) ) {
+				if ( ! in_array( $path, $own, true ) && file_exists( $path ) ) {
 					return true;
 				}
 			}

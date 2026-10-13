@@ -51,7 +51,7 @@ final class Converter {
 		$editor->maybe_exif_rotate();
 
 		$directory = dirname( $source );
-		$name      = Formats::unique_name( $directory, pathinfo( $source, PATHINFO_FILENAME ), $target, $source );
+		$name      = Formats::unique_name( $directory, pathinfo( $source, PATHINFO_FILENAME ), $target, [ $source, (string) wp_get_original_image_path( $attachment_id ) ] );
 		$saved     = $editor->save( "{$directory}/{$name}", $target );
 
 		if ( is_wp_error( $saved ) ) {

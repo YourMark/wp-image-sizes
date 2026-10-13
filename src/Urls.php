@@ -8,6 +8,7 @@
 namespace YourMark\ImageSizes;
 
 use WP_HTML_Tag_Processor;
+use WP_REST_Response;
 
 /**
  * Rewrites the URL of a size without a file to index.php, which every host runs.
@@ -28,6 +29,7 @@ final class Urls {
 		add_filter( 'wp_calculate_image_srcset', [ self::class, 'srcset' ] );
 		add_filter( 'wp_content_img_tag', [ self::class, 'content_img' ] );
 		add_filter( 'wp_prepare_attachment_for_js', [ self::class, 'media_library' ] );
+		add_filter( 'rest_prepare_attachment', [ self::class, 'rest' ] );
 	}
 
 	/**
@@ -120,6 +122,40 @@ final class Urls {
 				$response['sizes'][ $name ]['url'] = self::url( $size['url'] );
 			}
 		}
+
+		return $response;
+	}
+
+	/**
+	 * Covers the REST API the block editor reads sizes from, and keeps the lazy marker out of it.
+	 *
+	 * @param mixed $response Attachment response.
+	 * @return mixed
+	 */
+	public static function rest( $response ) {
+		if ( ! $response instanceof WP_REST_Response ) {
+			return $response;
+		}
+
+		$data = $response->get_data();
+
+		if ( ! is_array( $data ) || ! isset( $data['media_details']['sizes'] ) || ! is_array( $data['media_details']['sizes'] ) ) {
+			return $response;
+		}
+
+		foreach ( $data['media_details']['sizes'] as $name => $size ) {
+			if ( ! is_array( $size ) ) {
+				continue;
+			}
+
+			unset( $data['media_details']['sizes'][ $name ][ Sizes::LAZY ] );
+
+			if ( is_string( $size['source_url'] ?? null ) ) {
+				$data['media_details']['sizes'][ $name ]['source_url'] = self::url( $size['source_url'] );
+			}
+		}
+
+		$response->set_data( $data );
 
 		return $response;
 	}

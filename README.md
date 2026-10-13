@@ -75,6 +75,13 @@ measured the same as WebP at 82. Switching needs no regeneration: sizes made
 from then on take the new format, and a request for a size in the old format
 is redirected to the new one, so URLs saved in content keep working.
 
+Converting a JPEG to WebP or AVIF drops its EXIF and IPTC data (camera,
+copyright, caption), as the theme's earlier conversion did. A server whose
+image editor cannot write the chosen format keeps uploads as they are.
+
+An image edited in Media > Edit image keeps its format, and core makes all its
+sizes for the edit at once, as it always has.
+
 **Converting existing uploads** stores the original in the chosen format and
 keeps the old file, so links to it keep working; it is deleted with the
 attachment. Never converted: the site icon (iOS ignores a WebP or AVIF
@@ -129,6 +136,13 @@ registered for a moment, like the site icon's, could not come back), and drops
 them from the stored metadata: switching the plugin off and running
 `wp media regenerate --only-missing` brings them back. The admin asks before
 deleting; the AJAX endpoint itself trusts any administrator with a valid nonce.
+
+## Switching it off
+
+Remove the plugin, then run `wp media regenerate --only-missing`: core makes
+every size the plugin left lazy. Files the plugin made stay on disk, as do the
+`_yourmark_image_sizes_*` post meta rows; both are harmless, and the plugin
+picks them up again when it comes back.
 
 ## Tests
 
