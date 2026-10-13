@@ -1,0 +1,335 @@
+# Copyright (C) 2026 
+# This file is distributed under the same license as the YourMark image sizes plugin.
+msgid ""
+msgstr ""
+"Project-Id-Version: YourMark image sizes\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/yourmark-image-sizes\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: Mark Jansen <mark@yourmark.nl>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-10-13T15:06:19+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: yourmark-image-sizes\n"
+
+#. Plugin Name of the plugin
+#: yourmark-image-sizes.php
+msgid "YourMark image sizes"
+msgstr ""
+
+#. Description of the plugin
+#: yourmark-image-sizes.php
+msgid "Makes each image size the first time something uses it, in the format chosen under Settings > Media."
+msgstr ""
+
+#. translators: %s: WebP or AVIF
+#: src/Admin.php:89
+#, php-format
+msgid "Convert to %s"
+msgstr ""
+
+#: src/Admin.php:90
+msgid "Stores uploads from before this setting in the chosen format. The old file stays, so existing links keep working."
+msgstr ""
+
+#: src/Admin.php:91
+msgid "Convert originals"
+msgstr ""
+
+#: src/Admin.php:96
+msgid "Warm pages"
+msgstr ""
+
+#: src/Admin.php:97
+msgid "Makes the images every page in the sitemap shows, so no visitor waits for one."
+msgstr ""
+
+#: src/Admin.php:98
+msgid "Warm all pages"
+msgstr ""
+
+#: src/Admin.php:102
+msgid "Clean up sizes"
+msgstr ""
+
+#: src/Admin.php:103
+msgid "Deletes every image size file. The sizes pages use come back on their next request; the rest stay gone."
+msgstr ""
+
+#: src/Admin.php:104
+msgid "Count size files"
+msgstr ""
+
+#: src/Admin.php:166
+msgid "Sizes"
+msgstr ""
+
+#: src/Admin.php:221
+msgid "Unknown task."
+msgstr ""
+
+#: src/Admin.php:265
+msgid "Not an image."
+msgstr ""
+
+#: src/Admin.php:273
+msgid "This image has no such size."
+msgstr ""
+
+#: src/Admin.php:363
+msgid "On disk"
+msgstr ""
+
+#. translators: 1: size name, 2: dimensions
+#: src/Admin.php:369
+#, php-format
+msgid "Make %1$s (%2$s) now"
+msgstr ""
+
+#: src/Admin.php:370
+msgid "Make now"
+msgstr ""
+
+#. translators: %d: number of sizes
+#: src/Admin.php:384
+#, php-format
+msgid "Its %d size is on disk."
+msgid_plural "All %d sizes are on disk."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: 1: sizes on disk, 2: all sizes
+#: src/Admin.php:386
+#, php-format
+msgid "%1$d of %2$d sizes is on disk."
+msgid_plural "%1$d of %2$d sizes are on disk."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: 1: sizes on disk, 2: all sizes
+#: src/Admin.php:386
+msgid "The rest is made the first time something uses it."
+msgstr ""
+
+#. translators: 1: current format, 2: WebP or AVIF
+#: src/Admin.php:394
+#, php-format
+msgid "The original is %1$s. The button below converts it to %2$s and makes every size."
+msgstr ""
+
+#. translators: %s: WebP or AVIF
+#: src/Admin.php:423
+#, php-format
+msgid "Generate %s"
+msgstr ""
+
+#: src/Admin.php:428
+msgid "Make missing sizes"
+msgstr ""
+
+#: src/Admin.php:441
+msgid "Thumbnail"
+msgstr ""
+
+#: src/Admin.php:442
+msgid "Medium"
+msgstr ""
+
+#: src/Admin.php:443
+msgid "Medium large"
+msgstr ""
+
+#: src/Admin.php:444
+msgid "Large"
+msgstr ""
+
+#: src/Admin.php:462
+msgid "You are not allowed to do this."
+msgstr ""
+
+#: src/Admin.php:484
+msgid "Clear the page cache afterwards: this server does not pass missing images to WordPress."
+msgstr ""
+
+#: src/Admin.php:487
+msgid "Warming pages: {done} of {total}"
+msgstr ""
+
+#: src/Admin.php:488
+msgid "Done. Made {made} sizes across {total} pages."
+msgstr ""
+
+#: src/Admin.php:489
+msgid "Done. All {total} pages already had every image they show."
+msgstr ""
+
+#: src/Admin.php:490
+msgid "No pages found in the sitemap."
+msgstr ""
+
+#: src/Admin.php:491
+msgid "Converting: {done} of {total} images"
+msgstr ""
+
+#: src/Admin.php:492
+msgid "Done. Converted {converted} originals to {format}."
+msgstr ""
+
+#: src/Admin.php:493
+msgid "Done. Nothing needed converting."
+msgstr ""
+
+#: src/Admin.php:494
+msgid "{count} were already {format}."
+msgstr ""
+
+#: src/Admin.php:495
+msgid "The site icon stays PNG: iOS ignores any other format."
+msgstr ""
+
+#: src/Admin.php:496
+msgid "{count} are GIF, SVG or another format that is never converted."
+msgstr ""
+
+#: src/Admin.php:497
+msgid "{count} could not be converted; the server log has the reason."
+msgstr ""
+
+#: src/Admin.php:498
+msgid "Counting: {done} of {total} images"
+msgstr ""
+
+#: src/Admin.php:499
+msgid "Found {files} size files ({size})."
+msgstr ""
+
+#: src/Admin.php:500
+msgid "Found 1 size file ({size})."
+msgstr ""
+
+#: src/Admin.php:501
+msgid "Delete {files} files"
+msgstr ""
+
+#: src/Admin.php:502
+msgid "Delete 1 file"
+msgstr ""
+
+#: src/Admin.php:503
+msgid "Cancel"
+msgstr ""
+
+#: src/Admin.php:504
+msgid "Deleting: {done} of {total} images"
+msgstr ""
+
+#: src/Admin.php:505
+msgid "Done. Deleted {files} files and freed {size}. Sizes come back as pages use them."
+msgstr ""
+
+#: src/Admin.php:506
+msgid "Done. Deleted 1 file and freed {size}. Sizes come back as pages use them."
+msgstr ""
+
+#: src/Admin.php:507
+msgid "There are no size files to clean up."
+msgstr ""
+
+#: src/Admin.php:508
+msgid "Nothing was deleted."
+msgstr ""
+
+#: src/Admin.php:509
+msgid "Making…"
+msgstr ""
+
+#: src/Admin.php:510
+msgid "Done. The size is on disk."
+msgstr ""
+
+#: src/Admin.php:511
+msgid "Done. Made {made} sizes."
+msgstr ""
+
+#: src/Admin.php:512
+msgid "Done. Converted the original and made {made} sizes."
+msgstr ""
+
+#: src/Admin.php:513
+msgid "Something went wrong: {message}"
+msgstr ""
+
+#: src/Health.php:63
+msgid "Image sizes"
+msgstr ""
+
+#: src/Health.php:80
+msgid "New image sizes get their final URL straight away"
+msgstr ""
+
+#: src/Health.php:81
+msgid "New image sizes are served through PHP the first time"
+msgstr ""
+
+#: src/Health.php:84
+msgid "Performance"
+msgstr ""
+
+#: src/Health.php:89
+msgid "The web server passes a request for a missing image to WordPress, which makes the size and leaves it on disk for the server to serve from then on."
+msgstr ""
+
+#: src/Health.php:90
+msgid "The web server answers a request for a missing image itself, so pages point a new size at PHP until it exists. That works on every server, but each new size takes a detour once. The server rule in the image sizes plugin’s README removes the detour."
+msgstr ""
+
+#: src/Settings.php:45
+msgid "Images"
+msgstr ""
+
+#: src/Settings.php:46
+#: src/Settings.php:75
+msgid "File format"
+msgstr ""
+
+#: src/Settings.php:49
+msgid "Maintenance"
+msgstr ""
+
+#: src/Settings.php:59
+msgid "Image sizes are made the first time a page, the editor or the media library uses them, not at upload. Sizes nobody uses are never made."
+msgstr ""
+
+#: src/Settings.php:70
+msgid "As uploaded"
+msgstr ""
+
+#: src/Settings.php:70
+msgid "JPEG and PNG stay JPEG and PNG."
+msgstr ""
+
+#: src/Settings.php:71
+msgid "WebP"
+msgstr ""
+
+#: src/Settings.php:71
+msgid "Works in every browser. The safe choice."
+msgstr ""
+
+#: src/Settings.php:72
+msgid "AVIF"
+msgstr ""
+
+#: src/Settings.php:72
+msgid "About a quarter smaller than WebP at the same quality, but twice as slow to make."
+msgstr ""
+
+#: src/Settings.php:88
+msgid "Not supported by this server."
+msgstr ""
+
+#: src/Settings.php:92
+msgid "Applies to new uploads and to every size made from now on. Older uploads can be converted below."
+msgstr ""
