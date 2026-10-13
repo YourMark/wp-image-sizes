@@ -68,7 +68,13 @@ final class Converter {
 		$meta['height']         = $saved['height'];
 		$meta['filesize']       = (int) filesize( $saved['path'] );
 		$meta[ self::PREVIOUS ] = [ ...(array) ( $meta[ self::PREVIOUS ] ?? [] ), basename( $source ) ];
-		$meta['sizes']          = array_filter( (array) ( $meta['sizes'] ?? [] ), fn( array $size ): bool => ( $size['mime-type'] ?? '' ) === $target );
+		$sizes                  = (array) ( $meta['sizes'] ?? [] );
+		$meta['sizes']          = array_filter( $sizes, fn( array $size ): bool => ( $size['mime-type'] ?? '' ) === $target );
+
+		// The dropped sizes stay on disk for links in content; recorded, so the clean-up tool can remove them.
+		foreach ( array_diff_key( $sizes, $meta['sizes'] ) as $size ) {
+			Pruner::record( $attachment_id, (string) ( $size['file'] ?? '' ) );
+		}
 
 		update_attached_file( $attachment_id, $saved['path'] );
 		wp_update_attachment_metadata( $attachment_id, $meta );
@@ -86,7 +92,7 @@ final class Converter {
 	 * Why an attachment is not converted, or null when it would be.
 	 *
 	 * @param int $attachment_id Attachment ID.
-	 * @return string|null 'current' when already in the chosen format, 'icon' for the site icon, 'type' for a format that is never converted, such as GIF or SVG.
+	 * @return string|null 'current' when already in the chosen format, 'icon' for the site icon, 'animated' for an animation the conversion would flatten, 'type' for a format that is never converted, such as GIF or SVG.
 	 */
 	public static function skip_reason( int $attachment_id ): ?string {
 		$target = Formats::target();
@@ -100,7 +106,11 @@ final class Converter {
 			return 'type';
 		}
 
-		return self::convertible( $attachment_id ) ? null : 'icon';
+		if ( ! self::convertible( $attachment_id ) ) {
+			return 'icon';
+		}
+
+		return Formats::is_animated( (string) get_attached_file( $attachment_id ), $mime ) ? 'animated' : null;
 	}
 
 	/**

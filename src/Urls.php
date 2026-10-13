@@ -43,7 +43,8 @@ final class Urls {
 
 		$relative = Generator::relative_path( $url );
 
-		if ( $relative === null || file_exists( wp_get_upload_dir()['basedir'] . "/{$relative}" ) ) {
+		// Only a size can be made; a missing original stays a plain 404.
+		if ( $relative === null || ! Generator::looks_like_size( $relative ) || file_exists( wp_get_upload_dir()['basedir'] . "/{$relative}" ) ) {
 			return $url;
 		}
 
@@ -76,7 +77,9 @@ final class Urls {
 		}
 
 		foreach ( $sources as $width => $source ) {
-			$sources[ $width ]['url'] = self::url( $source['url'] );
+			if ( is_string( $source['url'] ?? null ) ) {
+				$sources[ $width ]['url'] = self::url( $source['url'] );
+			}
 		}
 
 		return $sources;
@@ -112,7 +115,9 @@ final class Urls {
 	 */
 	public static function media_library( array $response ): array {
 		foreach ( $response['sizes'] ?? [] as $name => $size ) {
-			$response['sizes'][ $name ]['url'] = self::url( $size['url'] );
+			if ( is_string( $size['url'] ?? null ) ) {
+				$response['sizes'][ $name ]['url'] = self::url( $size['url'] );
+			}
 		}
 
 		return $response;

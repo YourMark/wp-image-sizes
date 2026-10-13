@@ -42,7 +42,7 @@ final class Formats {
 	 */
 	public static function register(): void {
 		add_filter( 'wp_handle_upload', [ self::class, 'convert_upload' ] );
-		add_filter( 'image_editor_output_format', [ self::class, 'output_format' ] );
+		add_filter( 'image_editor_output_format', [ self::class, 'output_format' ], 10, 3 );
 		add_filter( 'wp_editor_set_quality', [ self::class, 'quality' ], 10, 2 );
 	}
 
@@ -115,6 +115,11 @@ final class Formats {
 			return $upload;
 		}
 
+		// Converting keeps only the first frame, and the upload is deleted afterwards.
+		if ( self::is_animated( $upload['file'], $upload['type'] ) ) {
+			return $upload;
+		}
+
 		$editor = wp_get_image_editor( $upload['file'] );
 
 		if ( is_wp_error( $editor ) ) {
@@ -150,13 +155,22 @@ final class Formats {
 	/**
 	 * Write sizes in the target format, also for an upload that slipped through above.
 	 *
-	 * @param array<string, string> $formats Source MIME type => output MIME type.
+	 * Core also applies this mapping to the original of an image it saves again,
+	 * so an animation is left out here as well.
+	 *
+	 * @param array<string, string> $formats  Source MIME type => output MIME type.
+	 * @param string|null           $filename Path of the image, when core has one.
+	 * @param string|null           $mime     Its MIME type.
 	 * @return array<string, string>
 	 */
-	public static function output_format( array $formats ): array {
+	public static function output_format( array $formats, $filename = null, $mime = null ): array {
 		$target = self::target();
 
 		if ( $target === null || self::is_site_icon_request() ) {
+			return $formats;
+		}
+
+		if ( is_string( $filename ) && is_string( $mime ) && self::is_animated( $filename, $mime ) ) {
 			return $formats;
 		}
 
@@ -185,6 +199,35 @@ final class Formats {
 			'image/avif' => 65,
 			default      => $quality,
 		};
+	}
+
+	/**
+	 * Whether a WebP or PNG file is animated.
+	 *
+	 * Core's wp_get_webp_info() reports alpha and animation as one type, so the
+	 * header is read here: WebP keeps an animation flag in its VP8X chunk, an
+	 * animated PNG has an acTL chunk before its image data.
+	 *
+	 * @param string $file Absolute path.
+	 * @param string $mime MIME type.
+	 * @return bool
+	 */
+	public static function is_animated( string $file, string $mime ): bool {
+		if ( ! in_array( $mime, [ 'image/webp', 'image/png' ], true ) || ! is_readable( $file ) ) {
+			return false;
+		}
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- A local file's first bytes.
+		$head = (string) file_get_contents( $file, false, null, 0, $mime === 'image/webp' ? 21 : 65536 );
+
+		if ( $mime === 'image/webp' ) {
+			return substr( $head, 12, 4 ) === 'VP8X' && strlen( $head ) > 20 && ( ord( $head[20] ) & 0x02 ) !== 0;
+		}
+
+		$actl = strpos( $head, 'acTL' );
+		$idat = strpos( $head, 'IDAT' );
+
+		return $actl !== false && ( $idat === false || $actl < $idat );
 	}
 
 	/**

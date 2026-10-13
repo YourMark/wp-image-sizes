@@ -8,17 +8,51 @@
 namespace YourMark\ImageSizes;
 
 /**
- * Lists an attachment's size files that nothing needs, or that come back on request.
+ * Deletes only files this plugin or core made for an attachment.
+ *
+ * A file merely named like a size, such as one dropped in by FTP or made by
+ * another plugin, is never touched: the plugin records every file it writes,
+ * and core lists its own in the metadata.
  */
 final class Pruner {
+
+	/**
+	 * Post meta key, one row per file this plugin made for the attachment.
+	 */
+	public const MADE = '_yourmark_image_sizes_made';
+
+	/**
+	 * Note a file made for an attachment, so it can be cleaned up later.
+	 *
+	 * One row per file rather than one array, so two sizes made at once cannot overwrite each other's record.
+	 *
+	 * @param int    $attachment_id Attachment ID.
+	 * @param string $file          File name, in the attachment's directory.
+	 * @return void
+	 */
+	public static function record( int $attachment_id, string $file ): void {
+		if ( ! in_array( $file, self::made( $attachment_id ), true ) ) {
+			add_post_meta( $attachment_id, self::MADE, basename( $file ) );
+		}
+	}
+
+	/**
+	 * Files this plugin made for an attachment.
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 * @return string[] File names.
+	 */
+	public static function made( int $attachment_id ): array {
+		return array_map( fn( $file ): string => basename( (string) $file ), (array) get_post_meta( $attachment_id, self::MADE, false ) );
+	}
 
 	/**
 	 * Delete, or only measure, the size files of an attachment that can go.
 	 *
 	 * Deleted stored sizes are also dropped from the stored metadata, so they
-	 * become lazy sizes under the same name. That keeps the way back open: with
-	 * this plugin switched off, `wp media regenerate --only-missing` sees them as
-	 * missing and makes them again.
+	 * become lazy sizes. That keeps the way back open: with this plugin
+	 * switched off, `wp media regenerate --only-missing` sees them as missing.
+	 * A URL to a deleted name is redirected to the size that replaced it.
 	 *
 	 * @param int  $attachment_id Attachment ID.
 	 * @param bool $stored        Whether to include sizes made at upload.
@@ -37,7 +71,7 @@ final class Pruner {
 			}
 		}
 
-		if ( $stored && ! $dry_run && $files ) {
+		if ( ! $dry_run && $files ) {
 			self::forget( $attachment_id, array_map( 'basename', $files ) );
 		}
 
@@ -50,14 +84,15 @@ final class Pruner {
 	/**
 	 * Size files of an attachment that can go.
 	 *
-	 * Orphans are files named like one of its sizes that no attachment refers to
-	 * any more: a format switched away from, or a size no longer registered.
-	 * Stored sizes are the ones core made at upload; deleting them is safe
-	 * because the endpoint makes them again under the same name.
+	 * Without $stored: files this plugin made that the metadata no longer
+	 * lists, such as sizes in a format switched away from. With it, also the
+	 * sizes core made at upload, for registered sizes only: those come back on
+	 * request, while a size registered only for a moment, like the site icon's,
+	 * would not.
 	 *
 	 * @param int  $attachment_id Attachment ID.
-	 * @param bool $stored        Whether to include stored sizes.
-	 * @return string[] Absolute paths.
+	 * @param bool $stored        Whether to include sizes made at upload.
+	 * @return string[] Absolute paths of files that exist.
 	 */
 	public static function files( int $attachment_id, bool $stored ): array {
 		$meta     = wp_get_attachment_metadata( $attachment_id );
@@ -68,120 +103,94 @@ final class Pruner {
 		}
 
 		$directory  = dirname( $attached );
-		$stem       = Sizes::stem( $meta );
-		$base       = Sizes::base();
 		$registered = wp_get_registered_image_subsizes();
-		$current    = [];
+		$base       = Sizes::base();
+		$stored     = $stored && Converter::convertible( $attachment_id );
+		$listed     = [];
+		$files      = [];
 
-		// Only a registered size comes back lazily. The site icon's sizes, for one, are registered only while it is cropped.
-		$stored = $stored && Converter::convertible( $attachment_id );
+		foreach ( (array) ( $meta['sizes'] ?? [] ) as $name => $size ) {
+			$file = (string) ( $size['file'] ?? '' );
 
-		foreach ( $meta['sizes'] ?? [] as $name => $size ) {
-			$current[ $size['file'] ] = empty( $size[ Sizes::LAZY ] ) && isset( $registered[ $name ] ) && ! in_array( $name, $base, true );
-		}
-
-		$files = [];
-
-		foreach ( self::size_files( $directory, $stem ) as $path ) {
-			$file = basename( $path );
-
-			if ( isset( $current[ $file ] ) ) {
-				if ( $stored && $current[ $file ] ) {
-					$files[] = $path;
-				}
-
+			if ( $file === '' ) {
 				continue;
 			}
 
-			if ( ! self::used_elsewhere( $directory, $file, $attachment_id ) ) {
-				$files[] = $path;
+			$listed[] = $file;
+
+			if ( $stored && empty( $size[ Sizes::LAZY ] ) && isset( $registered[ $name ] ) && ! in_array( $name, $base, true ) ) {
+				$files[] = $file;
 			}
 		}
 
-		return $files;
-	}
-
-	/**
-	 * Size files of an attachment that no other attachment uses, except the ones to keep.
-	 *
-	 * @param int      $attachment_id Attachment ID.
-	 * @param string   $directory     Absolute directory of its file.
-	 * @param string   $stem          Name its sizes carry.
-	 * @param string[] $keep          File names to leave alone.
-	 * @return string[] Absolute paths.
-	 */
-	public static function leftovers( int $attachment_id, string $directory, string $stem, array $keep ): array {
-		$files = [];
-
-		foreach ( self::size_files( $directory, $stem ) as $path ) {
-			$file = basename( $path );
-
-			if ( ! in_array( $file, $keep, true ) && ! self::used_elsewhere( $directory, $file, $attachment_id ) ) {
-				$files[] = $path;
+		foreach ( self::made( $attachment_id ) as $file ) {
+			if ( ! in_array( $file, $listed, true ) ) {
+				$files[] = $file;
 			}
 		}
 
-		return $files;
+		$paths = array_map( fn( string $file ): string => "{$directory}/{$file}", array_unique( $files ) );
+
+		return array_values( array_filter( $paths, 'file_exists' ) );
 	}
 
 	/**
-	 * Every file in a directory named like a size of a stem, in any format.
+	 * Every size file to delete when an attachment's file is replaced.
 	 *
-	 * @param string $directory Absolute directory.
-	 * @param string $stem      Name the sizes carry.
-	 * @return string[] Absolute paths.
+	 * The files this plugin made, and any file under a lazy size's name: one
+	 * made before the plugin kept records still shows the old image.
+	 *
+	 * @param int                  $attachment_id Attachment ID.
+	 * @param array<string, mixed> $metadata      The new metadata, before lazy sizes are added.
+	 * @return string[] Absolute paths of files that exist.
 	 */
-	private static function size_files( string $directory, string $stem ): array {
-		$paths = glob( $directory . '/' . addcslashes( $stem, '*?[]\\' ) . '-*x*.*' );
+	public static function stale( int $attachment_id, array $metadata ): array {
+		$attached = get_attached_file( $attachment_id );
 
-		// The glob also matches a longer name, such as photo-2-300x200.webp for photo.
-		$pattern = '/^' . preg_quote( $stem, '/' ) . '-\d+x\d+\.(?:jpe?g|png|webp|avif)$/i';
+		if ( ! $attached ) {
+			return [];
+		}
 
-		return array_values( array_filter( is_array( $paths ) ? $paths : [], fn( string $path ): bool => (bool) preg_match( $pattern, basename( $path ) ) ) );
+		$directory = dirname( $attached );
+		$files     = self::made( $attachment_id );
+		$lazy      = Sizes::add_lazy_sizes( $metadata );
+
+		foreach ( is_array( $lazy ) ? (array) ( $lazy['sizes'] ?? [] ) : [] as $size ) {
+			if ( ! empty( $size[ Sizes::LAZY ] ) ) {
+				$files[] = (string) $size['file'];
+			}
+		}
+
+		// Core may just have made a base size under a name this plugin used before.
+		$files = array_diff( $files, array_column( (array) ( $metadata['sizes'] ?? [] ), 'file' ) );
+		$paths = array_map( fn( string $file ): string => "{$directory}/{$file}", array_unique( $files ) );
+
+		return array_values( array_filter( $paths, 'file_exists' ) );
 	}
 
 	/**
-	 * Whether another attachment uses a file as its upload or names it in its metadata.
-	 *
-	 * An upload can itself be called photo-1440x990.webp, which looks exactly
-	 * like a size of photo.webp.
-	 *
-	 * @param string $directory     Absolute directory.
-	 * @param string $file          File name.
-	 * @param int    $attachment_id Attachment the file is checked for.
-	 * @return bool
-	 */
-	private static function used_elsewhere( string $directory, string $file, int $attachment_id ): bool {
-		global $wpdb;
-
-		$relative = ltrim( substr( $directory, strlen( wp_get_upload_dir()['basedir'] ) ) . "/{$file}", '/' );
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- No API searches all attachment metadata for a file name; runs for deletions only.
-		return (bool) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT 1 FROM {$wpdb->postmeta} WHERE post_id != %d AND ( ( meta_key = '_wp_attached_file' AND meta_value = %s ) OR ( meta_key = '_wp_attachment_metadata' AND meta_value LIKE %s ) ) LIMIT 1",
-				$attachment_id,
-				$relative,
-				'%' . $wpdb->esc_like( "\"{$file}\"" ) . '%'
-			)
-		);
-	}
-
-	/**
-	 * Drop stored entries whose files were deleted, so they become lazy sizes.
+	 * Drop deleted files from the records and from the stored sizes.
 	 *
 	 * @param int      $attachment_id Attachment ID.
 	 * @param string[] $files         Deleted file names.
 	 * @return void
 	 */
-	private static function forget( int $attachment_id, array $files ): void {
+	public static function forget( int $attachment_id, array $files ): void {
+		foreach ( $files as $file ) {
+			delete_post_meta( $attachment_id, self::MADE, $file );
+		}
+
 		$meta = wp_get_attachment_metadata( $attachment_id, true );
 
 		if ( ! is_array( $meta ) || empty( $meta['sizes'] ) ) {
 			return;
 		}
 
-		$meta['sizes'] = array_filter( $meta['sizes'], fn( array $size ): bool => ! in_array( $size['file'] ?? '', $files, true ) );
-		wp_update_attachment_metadata( $attachment_id, $meta );
+		$sizes = array_filter( (array) $meta['sizes'], fn( $size ): bool => ! in_array( $size['file'] ?? '', $files, true ) );
+
+		if ( count( $sizes ) !== count( $meta['sizes'] ) ) {
+			$meta['sizes'] = $sizes;
+			wp_update_attachment_metadata( $attachment_id, $meta );
+		}
 	}
 }

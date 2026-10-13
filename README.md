@@ -13,11 +13,16 @@ Works with any theme. It hooks into core's attachment metadata, so `srcset`,
 1. **Upload:** the original is stored in the chosen format (Settings > Media).
    Every registered size is added to the metadata when it is read, never
    stored. A size registered later works for every existing upload at once.
-2. **First request:** WordPress checks that the file name is a size in that
-   attachment's metadata, makes it, sends it and leaves it on disk. Anything
-   else falls through to the 404, so nobody can request made-up dimensions.
-   At most two images are resized at once per server
-   (`yourmark/image-sizes/concurrency`); each holds 150 to 350 MB.
+2. **First request:** WordPress checks that the file name belongs to an image
+   of this site, makes the size its metadata lists, sends it and leaves it on
+   disk. Nobody can request made-up dimensions: only sizes in the metadata are
+   ever made.
+   - A name from before a format switch or a change in dimensions gets a 301 to
+     the size that replaced it, so URLs saved in content keep working.
+   - At most two images are resized at once (`yourmark/image-sizes/concurrency`);
+     each holds 150 to 350 MB. A request that waits more than ten seconds, or
+     for a size that failed in the last ten minutes, gets a temporary redirect
+     to the nearest size that exists. Failures are logged once per ten minutes.
 3. **Warming:** saving a published post queues its page; widgets, the
    customiser, template parts and a theme switch queue the front page. A
    minute later a cron job fetches the page and makes each img's `src`, image
@@ -59,15 +64,23 @@ is redirected to the new one, so URLs saved in content keep working.
 
 **Converting existing uploads** stores the original in the chosen format and
 keeps the old file, so links to it keep working; it is deleted with the
-attachment. The site icon is never converted: iOS ignores a WebP or AVIF
-apple-touch-icon.
+attachment. Never converted: the site icon (iOS ignores a WebP or AVIF
+apple-touch-icon) and animated WebP or PNG (conversion keeps only the first
+frame).
 
-## Replacing and deleting
+## What gets deleted
 
-When an attachment's file is replaced (Enable Media Replace and the like, or
-`wp media regenerate`), sizes made from the old file are deleted, under its old
-name and its new one. Deleting an attachment also deletes sizes in a format
-switched away from, which core's own deletion does not know about.
+Only files that this plugin or core made for an attachment. The plugin records
+every file it writes (post meta `_yourmark_image_sizes_made`) and core lists its
+own in the metadata; a file merely named like a size, such as an FTP upload or
+another plugin's crop, is never touched.
+
+- **Replacing** an attachment's file (Enable Media Replace and the like, or
+  `wp media regenerate`) deletes the sizes made from the old file.
+- **Deleting** an attachment also deletes the files this plugin made that the
+  metadata no longer lists, such as sizes in a format switched away from.
+- Files made before the plugin kept records (the first versions on a site) are
+  left alone by `prune`.
 
 A replacement under the same name keeps the same URLs, so a browser or CDN may
 show the old image until its cache expires. That is no different in core.
@@ -96,13 +109,18 @@ wp image-sizes prune --dry-run          # list size files nothing refers to
 wp image-sizes prune --stored           # also delete sizes made at upload
 ```
 
-`prune` treats size files that another plugin made without registering the
-size as orphans. On sites with page builders, check `--dry-run` first.
-`--stored` also drops those sizes from the stored metadata, so switching the
-plugin off and running `wp media regenerate --only-missing` brings them back.
+`prune` deletes files the plugin made that no size lists any more. `--stored`
+also deletes the sizes core made at upload, for registered sizes only (a size
+registered for a moment, like the site icon's, could not come back), and drops
+them from the stored metadata: switching the plugin off and running
+`wp media regenerate --only-missing` brings them back. The admin asks before
+deleting; the AJAX endpoint itself trusts any administrator with a valid nonce.
 
 ## Filters
 
 - `yourmark/image-sizes/base`: sizes still made at upload. None by default.
 - `yourmark/image-sizes/concurrency`: images resized at once. Default 2.
 - `yourmark/image-sizes/enabled`: switch lazy sizes off.
+- `yourmark/image-sizes/lock-dir`: where lock files go. Defaults to
+  `wp-content/cache/yourmark-image-sizes`; point every site on a server at one
+  directory to share the resize slots between them.

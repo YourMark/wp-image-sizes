@@ -116,7 +116,7 @@
 		},
 
 		async convert( ui ) {
-			const counts = { converted: 0, current: 0, icon: 0, type: 0, failed: 0 };
+			const counts = { converted: 0, current: 0, icon: 0, animated: 0, type: 0, failed: 0 };
 
 			await eachBatch( 'convert', ( result, done ) => {
 				Object.keys( counts ).forEach( ( key ) => ( counts[ key ] += result[ key ] ) );
@@ -132,6 +132,10 @@
 
 			if ( counts.icon ) {
 				parts.push( text( 'skipIcon' ) );
+			}
+
+			if ( counts.animated ) {
+				parts.push( text( 'skipAnimated', { count: counts.animated } ) );
 			}
 
 			if ( counts.type ) {

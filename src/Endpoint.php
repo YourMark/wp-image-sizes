@@ -34,9 +34,9 @@ final class Endpoint {
 	/**
 	 * Send the requested size if the request names one, else let WordPress carry on to its 404.
 	 *
-	 * Only sizes in attachment metadata are sent. Any other file in uploads that
-	 * reaches PHP may be one the server deliberately refuses, such as Gravity
-	 * Forms' protected uploads.
+	 * Only sizes in attachment metadata are sent, or redirected to. Any other
+	 * file in uploads that reaches PHP may be one the server deliberately
+	 * refuses, such as Gravity Forms' protected uploads.
 	 *
 	 * @return void
 	 */
@@ -59,25 +59,33 @@ final class Endpoint {
 			return;
 		}
 
-		$size = Generator::make( $relative );
+		$result = Generator::resolve( $relative );
 
-		if ( ! is_array( $size ) ) {
+		if ( $result === null ) {
 			return;
 		}
 
-		if ( basename( $relative ) !== $size['file'] ) {
-			wp_safe_redirect( $size['url'], 301 );
+		if ( $result['action'] === 'redirect' ) {
+			// A stand-in is temporary: the next request should try the real size again.
+			if ( ! $result['permanent'] ) {
+				nocache_headers();
+			}
+
+			wp_safe_redirect( $result['url'], $result['permanent'] ? 301 : 302 );
 			exit;
 		}
 
+		// The PHP URL stays in a page only until its next render, and an image replaced under the same name changes behind it.
+		$max_age = isset( $_GET[ self::PARAM ] ) ? DAY_IN_SECONDS : YEAR_IN_SECONDS; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Only tells which URL form was used.
+
 		status_header( 200 );
-		header( "Content-Type: {$size['mime']}" );
-		header( 'Content-Length: ' . (string) filesize( $size['target'] ) );
-		header( 'Cache-Control: public, max-age=31536000' );
+		header( "Content-Type: {$result['mime']}" );
+		header( 'Content-Length: ' . (string) filesize( $result['path'] ) );
+		header( "Cache-Control: public, max-age={$max_age}" );
 
 		if ( $method === 'GET' ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_readfile -- Streams the image without loading it into memory.
-			readfile( $size['target'] );
+			readfile( $result['path'] );
 		}
 
 		exit;

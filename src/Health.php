@@ -157,7 +157,7 @@ final class Health {
 	public static function schedule_check(): void {
 		$routing = get_option( self::OPTION );
 
-		if ( is_array( $routing ) && $routing['checked'] > time() - DAY_IN_SECONDS ) {
+		if ( is_array( $routing ) && (int) ( $routing['checked'] ?? 0 ) > time() - DAY_IN_SECONDS ) {
 			return;
 		}
 

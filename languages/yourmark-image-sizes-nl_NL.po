@@ -54,10 +54,6 @@ msgstr "Alle pagina’s opwarmen"
 msgid "Clean up sizes"
 msgstr "Formaten opruimen"
 
-#: src/Admin.php:103
-msgid "Deletes every image size file. The sizes pages use come back on their next request; the rest stay gone."
-msgstr "Verwijdert alle formaatbestanden. Formaten die pagina’s gebruiken komen bij het volgende verzoek terug, de rest blijft weg."
-
 #: src/Admin.php:104
 msgid "Count size files"
 msgstr "Formaatbestanden tellen"
@@ -74,69 +70,69 @@ msgstr "Onbekende taak."
 msgid "Not an image."
 msgstr "Dit is geen afbeelding."
 
-#: src/Admin.php:462
+#: src/Admin.php:466
 msgid "You are not allowed to do this."
 msgstr "Je hebt geen toestemming om dit te doen."
 
 #. translators: %s: WebP or AVIF
-#: src/Admin.php:423
+#: src/Admin.php:427
 #, php-format
 msgid "Generate %s"
 msgstr "%s genereren"
 
-#: src/Admin.php:484
+#: src/Admin.php:488
 msgid "Clear the page cache afterwards: this server does not pass missing images to WordPress."
 msgstr "Leeg daarna de paginacache: deze server stuurt ontbrekende afbeeldingen niet door naar WordPress."
 
-#: src/Admin.php:487
+#: src/Admin.php:491
 msgid "Warming pages: {done} of {total}"
 msgstr "Pagina’s opwarmen: {done} van {total}"
 
-#: src/Admin.php:488
+#: src/Admin.php:492
 msgid "Done. Made {made} sizes across {total} pages."
 msgstr "Klaar. {made} formaten gemaakt voor {total} pagina’s."
 
-#: src/Admin.php:490
+#: src/Admin.php:494
 msgid "No pages found in the sitemap."
 msgstr "Geen pagina’s gevonden in de sitemap."
 
-#: src/Admin.php:491
+#: src/Admin.php:495
 msgid "Converting: {done} of {total} images"
 msgstr "Omzetten: {done} van {total} afbeeldingen"
 
-#: src/Admin.php:498
+#: src/Admin.php:503
 msgid "Counting: {done} of {total} images"
 msgstr "Tellen: {done} van {total} afbeeldingen"
 
-#: src/Admin.php:499
+#: src/Admin.php:504
 msgid "Found {files} size files ({size})."
 msgstr "{files} formaatbestanden gevonden ({size})."
 
-#: src/Admin.php:501
+#: src/Admin.php:506
 msgid "Delete {files} files"
 msgstr "{files} bestanden verwijderen"
 
-#: src/Admin.php:503
+#: src/Admin.php:508
 msgid "Cancel"
 msgstr "Annuleren"
 
-#: src/Admin.php:504
+#: src/Admin.php:509
 msgid "Deleting: {done} of {total} images"
 msgstr "Verwijderen: {done} van {total} afbeeldingen"
 
-#: src/Admin.php:508
+#: src/Admin.php:513
 msgid "Nothing was deleted."
 msgstr "Er is niets verwijderd."
 
-#: src/Admin.php:511
+#: src/Admin.php:516
 msgid "Done. Made {made} sizes."
 msgstr "Klaar. {made} formaten gemaakt."
 
-#: src/Admin.php:512
+#: src/Admin.php:517
 msgid "Done. Converted the original and made {made} sizes."
 msgstr "Klaar. Origineel omgezet en {made} formaten gemaakt."
 
-#: src/Admin.php:513
+#: src/Admin.php:518
 msgid "Something went wrong: {message}"
 msgstr "Er ging iets mis: {message}"
 
@@ -193,22 +189,22 @@ msgstr "Geldt voor nieuwe uploads en voor elk formaat dat vanaf nu wordt gemaakt
 msgid "This image has no such size."
 msgstr "Deze afbeelding heeft dat formaat niet."
 
-#: src/Admin.php:363
+#: src/Admin.php:367
 msgid "On disk"
 msgstr "Op schijf"
 
 #. translators: 1: size name, 2: dimensions
-#: src/Admin.php:369
+#: src/Admin.php:373
 #, php-format
 msgid "Make %1$s (%2$s) now"
 msgstr "%1$s (%2$s) nu maken"
 
-#: src/Admin.php:370
+#: src/Admin.php:374
 msgid "Make now"
 msgstr "Nu maken"
 
 #. translators: %d: number of sizes
-#: src/Admin.php:384
+#: src/Admin.php:388
 #, php-format
 msgid "Its %d size is on disk."
 msgid_plural "All %d sizes are on disk."
@@ -216,77 +212,77 @@ msgstr[0] "Het enige formaat staat op schijf."
 msgstr[1] "Alle %d formaten staan op schijf."
 
 #. translators: 1: sizes on disk, 2: all sizes
-#: src/Admin.php:386
+#: src/Admin.php:390
 msgid "The rest is made the first time something uses it."
 msgstr "De rest wordt gemaakt zodra iets het voor het eerst gebruikt."
 
 #. translators: 1: current format, 2: WebP or AVIF
-#: src/Admin.php:394
+#: src/Admin.php:398
 #, php-format
 msgid "The original is %1$s. The button below converts it to %2$s and makes every size."
 msgstr "Het origineel is %1$s. De knop hieronder zet het om naar %2$s en maakt alle formaten."
 
-#: src/Admin.php:428
+#: src/Admin.php:432
 msgid "Make missing sizes"
 msgstr "Ontbrekende formaten maken"
 
-#: src/Admin.php:441
+#: src/Admin.php:445
 msgid "Thumbnail"
 msgstr "Miniatuur"
 
-#: src/Admin.php:442
+#: src/Admin.php:446
 msgid "Medium"
 msgstr "Gemiddeld"
 
-#: src/Admin.php:443
+#: src/Admin.php:447
 msgid "Medium large"
 msgstr "Middelgroot"
 
-#: src/Admin.php:444
+#: src/Admin.php:448
 msgid "Large"
 msgstr "Groot"
 
-#: src/Admin.php:489
+#: src/Admin.php:493
 msgid "Done. All {total} pages already had every image they show."
 msgstr "Klaar. Alle {total} pagina’s hadden al elke afbeelding die ze tonen."
 
-#: src/Admin.php:492
+#: src/Admin.php:496
 msgid "Done. Converted {converted} originals to {format}."
 msgstr "Klaar. {converted} originelen omgezet naar {format}."
 
-#: src/Admin.php:493
+#: src/Admin.php:497
 msgid "Done. Nothing needed converting."
 msgstr "Klaar. Er hoefde niets omgezet te worden."
 
-#: src/Admin.php:494
+#: src/Admin.php:498
 msgid "{count} were already {format}."
 msgstr "{count} waren al {format}."
 
-#: src/Admin.php:495
+#: src/Admin.php:499
 msgid "The site icon stays PNG: iOS ignores any other format."
 msgstr "Het site-icoon blijft PNG: iOS negeert elk ander type."
 
-#: src/Admin.php:496
+#: src/Admin.php:501
 msgid "{count} are GIF, SVG or another format that is never converted."
 msgstr "{count} zijn GIF, SVG of een ander type dat nooit wordt omgezet."
 
-#: src/Admin.php:497
+#: src/Admin.php:502
 msgid "{count} could not be converted; the server log has the reason."
 msgstr "{count} konden niet worden omgezet; de reden staat in de serverlog."
 
-#: src/Admin.php:505
+#: src/Admin.php:510
 msgid "Done. Deleted {files} files and freed {size}. Sizes come back as pages use them."
 msgstr "Klaar. {files} bestanden verwijderd, {size} vrijgemaakt. Formaten komen terug zodra pagina’s ze gebruiken."
 
-#: src/Admin.php:507
+#: src/Admin.php:512
 msgid "There are no size files to clean up."
 msgstr "Er zijn geen formaatbestanden om op te ruimen."
 
-#: src/Admin.php:509
+#: src/Admin.php:514
 msgid "Making…"
 msgstr "Bezig met maken…"
 
-#: src/Admin.php:510
+#: src/Admin.php:515
 msgid "Done. The size is on disk."
 msgstr "Klaar. Het formaat staat op schijf."
 
@@ -315,21 +311,29 @@ msgid "The web server answers a request for a missing image itself, so pages poi
 msgstr "De webserver beantwoordt een verzoek voor een ontbrekende afbeelding zelf, dus pagina’s laten een nieuw formaat via PHP lopen tot het bestaat. Dat werkt op elke server, maar elk nieuw formaat maakt één keer een omweg. De serverregel in de README van de plugin haalt die omweg weg."
 
 #. translators: 1: sizes on disk, 2: all sizes
-#: src/Admin.php:386
+#: src/Admin.php:390
 #, php-format
 msgid "%1$d of %2$d sizes is on disk."
 msgid_plural "%1$d of %2$d sizes are on disk."
 msgstr[0] "%1$d van de %2$d formaten staat op schijf."
 msgstr[1] "%1$d van de %2$d formaten staan op schijf."
 
-#: src/Admin.php:500
+#: src/Admin.php:505
 msgid "Found 1 size file ({size})."
 msgstr "1 formaatbestand gevonden ({size})."
 
-#: src/Admin.php:502
+#: src/Admin.php:507
 msgid "Delete 1 file"
 msgstr "1 bestand verwijderen"
 
-#: src/Admin.php:506
+#: src/Admin.php:511
 msgid "Done. Deleted 1 file and freed {size}. Sizes come back as pages use them."
 msgstr "Klaar. 1 bestand verwijderd, {size} vrijgemaakt. Formaten komen terug zodra pagina’s ze gebruiken."
+
+#: src/Admin.php:103
+msgid "Deletes the sizes WordPress made at upload and the files of sizes that no longer exist. Sizes pages use come back on their next request."
+msgstr "Verwijdert de formaten die WordPress bij het uploaden maakte, en bestanden van formaten die niet meer bestaan. Formaten die pagina’s gebruiken komen bij het volgende verzoek terug."
+
+#: src/Admin.php:500
+msgid "{count} are animated and stay as they are, so they keep moving."
+msgstr "{count} zijn geanimeerd en blijven zoals ze zijn, zodat ze blijven bewegen."

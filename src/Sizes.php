@@ -74,14 +74,15 @@ final class Sizes {
 	/**
 	 * File name without extension that an upload's sizes are named after.
 	 *
-	 * Core names sizes after the uploaded file, not its -scaled or -rotated copy,
-	 * so URLs already in content keep pointing at the same names.
+	 * Core names sizes after the attached file without its -scaled or -rotated
+	 * suffix, so URLs already in content keep pointing at the same names. An
+	 * edited image is attached under a new name (photo-e123) and keeps it.
 	 *
 	 * @param array<string, mixed> $data Attachment metadata.
 	 * @return string
 	 */
 	public static function stem( array $data ): string {
-		return pathinfo( (string) ( $data['original_image'] ?? $data['file'] ), PATHINFO_FILENAME );
+		return (string) preg_replace( '/(?:-(?:scaled|rotated))+$/', '', pathinfo( (string) $data['file'], PATHINFO_FILENAME ) );
 	}
 
 	/**

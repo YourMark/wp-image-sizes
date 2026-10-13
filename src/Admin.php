@@ -100,7 +100,7 @@ final class Admin {
 
 		$tools['prune'] = [
 			__( 'Clean up sizes', 'yourmark-image-sizes' ),
-			__( 'Deletes every image size file. The sizes pages use come back on their next request; the rest stay gone.', 'yourmark-image-sizes' ),
+			__( 'Deletes the sizes WordPress made at upload and the files of sizes that no longer exist. Sizes pages use come back on their next request.', 'yourmark-image-sizes' ),
 			__( 'Count size files', 'yourmark-image-sizes' ),
 		];
 
@@ -224,7 +224,7 @@ final class Admin {
 		$ids = Library::image_ids( $after, self::BATCH );
 
 		// Convert: what happened to each image, so the summary can say why nothing changed. Count and prune: files and bytes.
-		$counts = array_fill_keys( [ 'converted', 'current', 'icon', 'type', 'failed', 'files', 'bytes' ], 0 );
+		$counts = array_fill_keys( [ 'converted', 'current', 'icon', 'animated', 'type', 'failed', 'files', 'bytes' ], 0 );
 
 		foreach ( $ids as $id ) {
 			if ( $operation !== 'convert' ) {
@@ -325,6 +325,10 @@ final class Admin {
 		$sizes     = [];
 
 		foreach ( (array) ( $meta['sizes'] ?? [] ) as $name => $size ) {
+			if ( empty( $size['file'] ) || empty( $size['width'] ) || empty( $size['height'] ) ) {
+				continue;
+			}
+
 			$path = $prefix . $size['file'];
 
 			$sizes[ (string) $name ] = [
@@ -493,6 +497,7 @@ final class Admin {
 			'convertedNone' => __( 'Done. Nothing needed converting.', 'yourmark-image-sizes' ),
 			'skipCurrent'   => __( '{count} were already {format}.', 'yourmark-image-sizes' ),
 			'skipIcon'      => __( 'The site icon stays PNG: iOS ignores any other format.', 'yourmark-image-sizes' ),
+			'skipAnimated'  => __( '{count} are animated and stay as they are, so they keep moving.', 'yourmark-image-sizes' ),
 			'skipType'      => __( '{count} are GIF, SVG or another format that is never converted.', 'yourmark-image-sizes' ),
 			'failed'        => __( '{count} could not be converted; the server log has the reason.', 'yourmark-image-sizes' ),
 			'counting'      => __( 'Counting: {done} of {total} images', 'yourmark-image-sizes' ),

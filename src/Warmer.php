@@ -104,12 +104,11 @@ final class Warmer {
 	 * @return int Number of sizes made.
 	 */
 	public static function warm( string $url ): int {
-		// Only this site: the admin passes URLs in, and the request comes from the server.
-		if ( ! Sizes::enabled() || wp_parse_url( $url, PHP_URL_HOST ) !== wp_parse_url( home_url(), PHP_URL_HOST ) ) {
+		if ( ! Sizes::enabled() || ! self::is_own_page( $url ) ) {
 			return 0;
 		}
 
-		$response = wp_remote_get( $url, self::request_args() );
+		$response = wp_safe_remote_get( $url, self::request_args( 0 ) );
 
 		if ( wp_remote_retrieve_response_code( $response ) !== 200 ) {
 			return 0;
@@ -141,7 +140,29 @@ final class Warmer {
 	 * @return string[]
 	 */
 	public static function sitemap_urls(): array {
-		return array_values( array_unique( self::read_sitemap( home_url( '/wp-sitemap.xml' ), 0 ) ) );
+		return array_values( array_unique( array_filter( self::read_sitemap( home_url( '/wp-sitemap.xml' ), 0 ), [ self::class, 'is_own_page' ] ) ) );
+	}
+
+	/**
+	 * Whether a URL is a page on this site: same scheme, host and port as home.
+	 *
+	 * The admin passes URLs in and the request comes from the server, so nothing
+	 * else may get through.
+	 *
+	 * @param string $url URL to check.
+	 * @return bool
+	 */
+	public static function is_own_page( string $url ): bool {
+		$home  = wp_parse_url( home_url() );
+		$parts = wp_parse_url( $url );
+
+		if ( ! is_array( $home ) || ! is_array( $parts ) || isset( $parts['user'] ) || isset( $parts['pass'] ) ) {
+			return false;
+		}
+
+		return ( $parts['scheme'] ?? '' ) === ( $home['scheme'] ?? '' )
+			&& strtolower( $parts['host'] ?? '' ) === strtolower( $home['host'] ?? '' )
+			&& ( $parts['port'] ?? null ) === ( $home['port'] ?? null );
 	}
 
 	/**
@@ -200,7 +221,7 @@ final class Warmer {
 	 */
 	private static function read_sitemap( string $url, int $depth ): array {
 		$previous = libxml_use_internal_errors( true );
-		$xml      = simplexml_load_string( wp_remote_retrieve_body( wp_remote_get( $url, self::request_args() ) ) );
+		$xml      = simplexml_load_string( wp_remote_retrieve_body( wp_safe_remote_get( $url, self::request_args( 3 ) ) ) );
 		libxml_use_internal_errors( $previous );
 
 		if ( $xml === false ) {
@@ -233,13 +254,15 @@ final class Warmer {
 	/**
 	 * Arguments for a request from the site to itself.
 	 *
+	 * @param int $redirects Redirects to follow. Pages need none; the sitemap is redirected by SEO plugins.
 	 * @return array<string, mixed>
 	 */
-	private static function request_args(): array {
+	private static function request_args( int $redirects ): array {
 		return [
-			'timeout'   => 30,
+			'timeout'     => 30,
+			'redirection' => $redirects,
 			/** This filter is documented in wp-includes/class-wp-http-streams.php */
-			'sslverify' => apply_filters( 'https_local_ssl_verify', false ),
+			'sslverify'   => apply_filters( 'https_local_ssl_verify', false ),
 		];
 	}
 }
