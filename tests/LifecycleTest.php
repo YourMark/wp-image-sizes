@@ -86,6 +86,36 @@ final class LifecycleTest extends TestCase {
 		$this->assertArrayNotHasKey( Sizes::LAZY, $sizes['medium'] );
 	}
 
+	public function test_the_rest_api_still_lists_attachments_without_metadata(): void {
+		$zip = self::factory()->attachment->create_object(
+			[
+				'file'           => '2026/10/archive.zip',
+				'post_mime_type' => 'application/zip',
+			]
+		);
+		$this->upload( $this->image( 'red.jpg' ) );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$this->assertSame( 200, rest_do_request( "/wp/v2/media/{$zip}" )->get_status() );
+		$this->assertSame( 200, rest_do_request( '/wp/v2/media' )->get_status() );
+	}
+
+	public function test_an_edit_of_the_thumbnail_only_or_all_but_it_keeps_every_file_in_place(): void {
+		update_option( 'yourmark_image_format', 'original' );
+		$id = $this->upload( $this->image( 'legacy.jpg' ) );
+		update_option( 'yourmark_image_format', 'webp' );
+
+		foreach ( [ 'thumbnail', 'nothumb', 'all' ] as $target ) {
+			$this->edit( $id, [ [ 'r' => 90 ] ], $target );
+
+			$this->assertFileExists( (string) get_attached_file( $id ), $target );
+
+			foreach ( wp_get_attachment_metadata( $id, true )['sizes'] as $name => $size ) {
+				$this->assertFileExists( $this->path( $id, $size['file'] ), "{$target}: {$name}" );
+			}
+		}
+	}
+
 	public function test_switching_the_plugin_off_and_on_again(): void {
 		$id = $this->upload( $this->image( 'red.jpg' ) );
 		Endpoint::respond( $this->uri( $id, $this->size_file( $id, 'medium' ) ) );
@@ -141,12 +171,13 @@ final class LifecycleTest extends TestCase {
 	 *
 	 * @param int                              $attachment_id Attachment ID.
 	 * @param array<int, array<string, mixed>> $history       Edit steps, such as [ [ 'r' => 90 ] ].
+	 * @param string                           $target        Which files the edit applies to: all, thumbnail or nothumb.
 	 * @return void
 	 */
-	private function edit( int $attachment_id, array $history ): void {
+	private function edit( int $attachment_id, array $history, string $target = 'all' ): void {
 		$_REQUEST = [
 			'history' => wp_json_encode( $history ),
-			'target'  => 'all',
+			'target'  => $target,
 			'do'      => 'save',
 			'context' => '',
 		];

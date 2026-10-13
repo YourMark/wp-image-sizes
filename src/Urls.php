@@ -139,7 +139,8 @@ final class Urls {
 
 		$data = $response->get_data();
 
-		if ( ! is_array( $data ) || ! isset( $data['media_details']['sizes'] ) || ! is_array( $data['media_details']['sizes'] ) ) {
+		// Core sends media_details as an empty object for an attachment without metadata, such as a ZIP.
+		if ( ! is_array( $data ) || ! is_array( $data['media_details'] ?? null ) || ! is_array( $data['media_details']['sizes'] ?? null ) ) {
 			return $response;
 		}
 
