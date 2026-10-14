@@ -221,18 +221,26 @@ final class EndpointTest extends TestCase {
 		$this->assertFileDoesNotExist( $this->lock_file( $id, $large ), 'A success removes its lock.' );
 	}
 
-	public function test_where_it_can_finish_later_a_size_is_made_at_once_when_a_slot_is_free(): void {
+	public function test_while_resizes_are_busy_sizes_wait_in_a_queue_for_the_next_free_slot(): void {
 		add_filter( 'yourmark/image-sizes/defer', '__return_true' );
 		$id     = $this->upload( $this->image( 'red.jpg' ) );
 		$medium = $this->size_file( $id, 'medium' );
+		$large  = $this->size_file( $id, 'large' );
 
-		$response = Endpoint::respond( $this->uri( $id, $medium ) );
+		$this->hold( $this->lock_dir() . 'slot-0.lock' );
+		$this->hold( $this->lock_dir() . 'slot-1.lock' );
+		Generator::complete( Endpoint::respond( $this->uri( $id, $medium ) )['then'] ?? [] );
+		$this->release_locks();
 
-		$this->assertSame( $this->path( $id, $medium ), $response['file'] );
-		$this->assertArrayNotHasKey( 'then', $response );
+		$this->assertFileDoesNotExist( $this->path( $id, $medium ), 'Queued, not made, while every slot was taken.' );
+
+		Generator::complete( Endpoint::respond( $this->uri( $id, $large ) )['then'] ?? [] );
+
+		$this->assertFileExists( $this->path( $id, $medium ), 'The next request with a free slot works through the queue.' );
+		$this->assertFileExists( $this->path( $id, $large ) );
 	}
 
-	public function test_where_it_can_finish_later_a_busy_server_sends_a_larger_file_at_once(): void {
+	public function test_where_it_can_finish_later_a_missing_size_gets_a_larger_file_at_once(): void {
 		add_filter( 'yourmark/image-sizes/defer', '__return_true' );
 		$id     = $this->upload( $this->image( 'red.jpg' ) );
 		$medium = $this->size_file( $id, 'medium' );

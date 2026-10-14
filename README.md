@@ -43,12 +43,13 @@ Works with any theme. It hooks into core's attachment metadata, so `srcset`,
    of this site, makes the size its metadata lists, sends it and leaves it on
    disk. Nobody can request made-up dimensions: only sizes in the metadata are
    ever made.
-   - On PHP-FPM and LiteSpeed (`yourmark/image-sizes/defer`) the visitor does
-     not wait for the resize. The smallest file that exists and is at least as
-     wide, else the original, is sent at once with `no-store`, and the size is
-     made once the response is out. The next request gets the size itself.
-     Check that no CDN rule caches images regardless of `Cache-Control`, or the
-     stand-in sticks.
+   - On PHP-FPM and LiteSpeed (`yourmark/image-sizes/defer`) the visitor never
+     waits for a resize. The smallest file that exists and is at least as wide,
+     else the original, is sent at once with `no-store`, and the size joins a
+     queue once the response is out. Only as many requests as there are slots
+     work through it; every other one frees its PHP worker straight away, so a
+     page of new images is not served one resize at a time. The next visitor
+     gets the size itself, as a plain file.
    - A name from before a format switch, a change in dimensions or a
      conversion to a new file name gets a 301 to the size that replaced it, so
      URLs saved in content keep working. Among images that share a name, the

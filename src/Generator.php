@@ -30,11 +30,19 @@ final class Generator {
 	private const RETRY_AFTER = 600;
 
 	/**
-	 * How long making a size may wait for locks: up to the wait filter, not at all, or only for a slot.
+	 * Making a size waits for its locks, up to the wait filter.
 	 */
-	private const WAIT  = 'wait';
-	private const NOW   = 'now';
-	private const LATER = 'later';
+	private const WAIT = 'wait';
+
+	/**
+	 * Making a size from the queue: the caller holds a slot, and a size another request is making is left to it.
+	 */
+	private const HELD = 'held';
+
+	/**
+	 * Seconds one request spends working through the queue before it lets the next request take over.
+	 */
+	private const RUN_FOR = 20;
 
 	/**
 	 * Suffixes core adds to an attached file that its sizes do not carry.
@@ -100,11 +108,9 @@ final class Generator {
 	 * exists stands in on a temporary redirect, so the visitor never gets a
 	 * broken image.
 	 *
-	 * With $defer, a missing size is not waited for. It is made at once when a
-	 * resize slot is free, which for a small size takes tens of milliseconds
-	 * and saves sending a far heavier file. Otherwise a larger file that exists
-	 * is sent, and the caller makes the size with complete() once the response
-	 * is out.
+	 * With $defer, a missing size is not waited for: the smallest file that
+	 * exists and is at least as wide is sent at once, and the caller queues the
+	 * size with complete() once the response is out, for the next visitor.
 	 *
 	 * @param string $relative Path below the uploads base.
 	 * @param bool   $defer    Whether the caller can make the size after responding.
@@ -128,7 +134,7 @@ final class Generator {
 			];
 		}
 
-		if ( $defer && self::ensure( $size, false, self::NOW ) !== true ) {
+		if ( $defer && ! file_exists( $size['target'] ) ) {
 			$stand_in = self::stand_in( $size );
 
 			return [
@@ -155,16 +161,125 @@ final class Generator {
 	}
 
 	/**
-	 * Make a size that was answered with a stand-in, after the response went out.
+	 * Queue a size that was answered with a stand-in, and work through the queue if a slot is free.
 	 *
-	 * Skips a size another request is already making: nobody waits for this one.
+	 * Runs after the response went out. Only as many requests as there are
+	 * slots resize; every other one queues its size and frees its PHP worker
+	 * at once, so a page of new images is not served one resize at a time.
 	 *
 	 * @param array $size Size from a stand-in resolution.
 	 * @phpstan-param Size $size
 	 * @return void
 	 */
 	public static function complete( array $size ): void {
-		self::ensure( $size, false, self::LATER );
+		self::enqueue( $size['target'] );
+
+		$slot = self::acquire( self::slot_paths(), 0.0 );
+
+		if ( $slot === 'busy' ) {
+			return;
+		}
+
+		try {
+			$until = microtime( true ) + self::RUN_FOR;
+
+			while ( microtime( true ) < $until ) {
+				$target = self::dequeue();
+
+				if ( $target === null ) {
+					break;
+				}
+
+				$found = self::find_target( $target );
+
+				if ( $found !== null ) {
+					self::ensure( $found, false, self::HELD );
+				}
+			}
+		} finally {
+			self::release( $slot );
+		}
+	}
+
+	/**
+	 * Add a size to the queue, once however often it is asked for.
+	 *
+	 * @param string $target Absolute path the size is written to.
+	 * @return void
+	 */
+	private static function enqueue( string $target ): void {
+		$directory = self::queue_dir();
+
+		if ( $directory !== null ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- A small marker file; WP_Filesystem may need credentials.
+			file_put_contents( $directory . md5( $target ), $target );
+		}
+	}
+
+	/**
+	 * Take the oldest size off the queue, claimed so that no other request takes it too.
+	 *
+	 * @return string|null Absolute path the size is written to.
+	 */
+	private static function dequeue(): ?string {
+		$directory = self::queue_dir();
+		$entries   = $directory === null ? false : glob( $directory . '*' );
+
+		if ( ! $entries ) {
+			return null;
+		}
+
+		usort( $entries, fn( string $a, string $b ): int => (int) filemtime( $a ) <=> (int) filemtime( $b ) );
+
+		foreach ( $entries as $entry ) {
+			$claimed = $entry . '.' . wp_generate_password( 6, false );
+
+			// Another request may claim it first, so a failed rename is expected and not worth a warning.
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename, WordPress.PHP.NoSilencedErrors.Discouraged -- The atomic rename is the claim.
+			if ( ! @rename( $entry, $claimed ) ) {
+				continue;
+			}
+
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- A local marker file.
+			$target = (string) file_get_contents( $claimed );
+			wp_delete_file( $claimed );
+
+			return $target;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Directory of queued sizes for this site.
+	 *
+	 * Inside the lock directory, which several sites may share, so per uploads directory.
+	 *
+	 * @return string|null With a trailing slash; null when it cannot be created.
+	 */
+	private static function queue_dir(): ?string {
+		$directory = self::lock_dir() . 'queue-' . substr( md5( wp_get_upload_dir()['basedir'] ), 0, 12 ) . '/';
+
+		return is_dir( $directory ) || wp_mkdir_p( $directory ) ? $directory : null;
+	}
+
+	/**
+	 * The size a queued target path names.
+	 *
+	 * @param string $target Absolute path below the uploads directory.
+	 * @return array|null
+	 * @phpstan-return Size|null
+	 */
+	private static function find_target( string $target ): ?array {
+		$basedir = wp_get_upload_dir()['basedir'];
+
+		if ( ! str_starts_with( $target, "{$basedir}/" ) ) {
+			return null;
+		}
+
+		$found = self::find( substr( $target, strlen( $basedir ) + 1 ) );
+
+		return $found !== null && $found['exact'] ? $found['size'] : null;
 	}
 
 	/**
@@ -431,7 +546,7 @@ final class Generator {
 	 *
 	 * @param array  $size  Size from find().
 	 * @param bool   $retry Whether to ignore a remembered failure.
-	 * @param string $wait  WAIT, NOW or LATER.
+	 * @param string $wait  WAIT or HELD.
 	 * @phpstan-param Size $size
 	 * @return true|WP_Error
 	 */
@@ -506,12 +621,11 @@ final class Generator {
 	 * and for a resize slot. Without it, a queue of requests for one file would
 	 * each wait in turn and tie up PHP workers.
 	 *
-	 * NOW takes no lock that is not free at once, for a visitor who gets a
-	 * stand-in instead. LATER leaves a size another request is making to that
-	 * request, but waits its turn for a slot, since nobody waits for it.
+	 * HELD is for the queue: the caller holds a slot already, and a size
+	 * another request is making is left to it.
 	 *
 	 * @param array  $size Size from find().
-	 * @param string $wait WAIT, NOW or LATER.
+	 * @param string $wait WAIT or HELD.
 	 * @phpstan-param Size $size
 	 * @return true|WP_Error
 	 */
@@ -535,7 +649,11 @@ final class Generator {
 				return true;
 			}
 
-			$slot = self::acquire( self::slot_paths(), $wait === self::NOW ? 0.0 : $deadline );
+			if ( $wait === self::HELD ) {
+				return self::write( $size );
+			}
+
+			$slot = self::acquire( self::slot_paths(), $deadline );
 
 			if ( $slot === 'busy' ) {
 				return self::busy();
