@@ -332,13 +332,20 @@ final class Admin {
 			}
 
 			$path = $prefix . $size['file'];
+			$made = file_exists( "{$basedir}/{$path}" );
+			$step = Sizes::is_step( $size );
+
+			// An in-between width only shows once a browser asked for it; listing every one would bury the sizes that matter.
+			if ( $step && ! $made ) {
+				continue;
+			}
 
 			$sizes[ (string) $name ] = [
-				'label'  => $labels[ $name ] ?? (string) $name,
-				'named'  => isset( $labels[ $name ] ),
+				'label'  => $step ? __( 'In-between width', 'yourmark-image-sizes' ) : ( $labels[ $name ] ?? (string) $name ),
+				'named'  => $step || isset( $labels[ $name ] ),
 				'width'  => (int) $size['width'],
 				'height' => (int) $size['height'],
-				'made'   => file_exists( "{$basedir}/{$path}" ),
+				'made'   => $made,
 				'path'   => $path,
 			];
 		}

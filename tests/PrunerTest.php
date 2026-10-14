@@ -20,7 +20,7 @@ final class PrunerTest extends TestCase {
 
 	public function test_a_file_merely_named_like_a_size_is_never_deleted(): void {
 		$id      = $this->upload( $this->image( 'red.jpg' ) );
-		$foreign = $this->path( $id, 'red-640x480.webp' );
+		$foreign = $this->path( $id, 'red-650x488.webp' );
 		copy( (string) get_attached_file( $id ), $foreign );
 
 		Pruner::prune( $id, true, false );

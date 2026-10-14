@@ -5,11 +5,11 @@ msgstr ""
 "Project-Id-Version: YourMark image sizes\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/yourmark-image-sizes\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: Mark Jansen <mark@yourmark.nl>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-13T15:55:28+00:00\n"
+"POT-Creation-Date: 2026-10-14T10:10:30+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: yourmark-image-sizes\n"
@@ -70,30 +70,34 @@ msgstr ""
 msgid "Unknown task."
 msgstr ""
 
-#: src/Admin.php:265
+#: src/Admin.php:266
 msgid "Not an image."
 msgstr ""
 
-#: src/Admin.php:273
+#: src/Admin.php:275
 msgid "This image has no such size."
 msgstr ""
 
-#: src/Admin.php:367
+#: src/Admin.php:344
+msgid "In-between width"
+msgstr ""
+
+#: src/Admin.php:376
 msgid "On disk"
 msgstr ""
 
 #. translators: 1: size name, 2: dimensions
-#: src/Admin.php:373
+#: src/Admin.php:382
 #, php-format
 msgid "Make %1$s (%2$s) now"
 msgstr ""
 
-#: src/Admin.php:374
+#: src/Admin.php:383
 msgid "Make now"
 msgstr ""
 
 #. translators: %d: number of sizes
-#: src/Admin.php:388
+#: src/Admin.php:397
 #, php-format
 msgid "Its %d size is on disk."
 msgid_plural "All %d sizes are on disk."
@@ -101,7 +105,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: 1: sizes on disk, 2: all sizes
-#: src/Admin.php:390
+#: src/Admin.php:399
 #, php-format
 msgid "%1$d of %2$d sizes is on disk."
 msgid_plural "%1$d of %2$d sizes are on disk."
@@ -109,159 +113,159 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: 1: sizes on disk, 2: all sizes
-#: src/Admin.php:390
+#: src/Admin.php:399
 msgid "The rest is made the first time something uses it."
 msgstr ""
 
 #. translators: 1: current format, 2: WebP or AVIF
-#: src/Admin.php:398
+#: src/Admin.php:407
 #, php-format
 msgid "The original is %1$s. The button below converts it to %2$s and makes every size."
 msgstr ""
 
 #. translators: %s: WebP or AVIF
-#: src/Admin.php:427
+#: src/Admin.php:436
 #, php-format
 msgid "Generate %s"
 msgstr ""
 
-#: src/Admin.php:432
+#: src/Admin.php:441
 msgid "Make missing sizes"
 msgstr ""
 
-#: src/Admin.php:445
+#: src/Admin.php:454
 msgid "Thumbnail"
 msgstr ""
 
-#: src/Admin.php:446
+#: src/Admin.php:455
 msgid "Medium"
 msgstr ""
 
-#: src/Admin.php:447
+#: src/Admin.php:456
 msgid "Medium large"
 msgstr ""
 
-#: src/Admin.php:448
+#: src/Admin.php:457
 msgid "Large"
 msgstr ""
 
-#: src/Admin.php:466
+#: src/Admin.php:475
 msgid "You are not allowed to do this."
 msgstr ""
 
-#: src/Admin.php:488
+#: src/Admin.php:497
 msgid "Clear the page cache afterwards: this server does not pass missing images to WordPress."
 msgstr ""
 
-#: src/Admin.php:491
+#: src/Admin.php:500
 msgid "Warming pages: {done} of {total}"
 msgstr ""
 
-#: src/Admin.php:492
+#: src/Admin.php:501
 msgid "Done. Made {made} sizes across {total} pages."
 msgstr ""
 
-#: src/Admin.php:493
+#: src/Admin.php:502
 msgid "Done. All {total} pages already had every image they show."
 msgstr ""
 
-#: src/Admin.php:494
+#: src/Admin.php:503
 msgid "No pages found in the sitemap."
 msgstr ""
 
-#: src/Admin.php:495
+#: src/Admin.php:504
 msgid "Converting: {done} of {total} images"
 msgstr ""
 
-#: src/Admin.php:496
+#: src/Admin.php:505
 msgid "Done. Converted {converted} originals to {format}."
 msgstr ""
 
-#: src/Admin.php:497
+#: src/Admin.php:506
 msgid "Done. Nothing needed converting."
 msgstr ""
 
-#: src/Admin.php:498
+#: src/Admin.php:507
 msgid "{count} were already {format}."
 msgstr ""
 
-#: src/Admin.php:499
+#: src/Admin.php:508
 msgid "The site icon stays PNG: iOS ignores any other format."
 msgstr ""
 
-#: src/Admin.php:500
+#: src/Admin.php:509
 msgid "{count} are animated and stay as they are, so they keep moving."
 msgstr ""
 
-#: src/Admin.php:501
+#: src/Admin.php:510
 msgid "{count} are GIF, SVG or another format that is never converted."
 msgstr ""
 
-#: src/Admin.php:502
+#: src/Admin.php:511
 msgid "{count} could not be converted; the server log has the reason."
 msgstr ""
 
-#: src/Admin.php:503
+#: src/Admin.php:512
 msgid "Counting: {done} of {total} images"
 msgstr ""
 
-#: src/Admin.php:504
+#: src/Admin.php:513
 msgid "Found {files} size files ({size})."
 msgstr ""
 
-#: src/Admin.php:505
+#: src/Admin.php:514
 msgid "Found 1 size file ({size})."
 msgstr ""
 
-#: src/Admin.php:506
+#: src/Admin.php:515
 msgid "Delete {files} files"
 msgstr ""
 
-#: src/Admin.php:507
+#: src/Admin.php:516
 msgid "Delete 1 file"
 msgstr ""
 
-#: src/Admin.php:508
+#: src/Admin.php:517
 msgid "Cancel"
 msgstr ""
 
-#: src/Admin.php:509
+#: src/Admin.php:518
 msgid "Deleting: {done} of {total} images"
 msgstr ""
 
-#: src/Admin.php:510
+#: src/Admin.php:519
 msgid "Done. Deleted {files} files and freed {size}. Sizes come back as pages use them."
 msgstr ""
 
-#: src/Admin.php:511
+#: src/Admin.php:520
 msgid "Done. Deleted 1 file and freed {size}. Sizes come back as pages use them."
 msgstr ""
 
-#: src/Admin.php:512
+#: src/Admin.php:521
 msgid "There are no size files to clean up."
 msgstr ""
 
-#: src/Admin.php:513
+#: src/Admin.php:522
 msgid "Nothing was deleted."
 msgstr ""
 
-#: src/Admin.php:514
+#: src/Admin.php:523
 msgid "Making…"
 msgstr ""
 
-#: src/Admin.php:515
+#: src/Admin.php:524
 msgid "Done. The size is on disk."
 msgstr ""
 
-#: src/Admin.php:516
+#: src/Admin.php:525
 msgid "Done. Made {made} sizes."
 msgstr ""
 
-#: src/Admin.php:517
+#: src/Admin.php:526
 msgid "Done. Converted the original and made {made} sizes."
 msgstr ""
 
-#: src/Admin.php:518
+#: src/Admin.php:527
 msgid "Something went wrong: {message}"
 msgstr ""
 

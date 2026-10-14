@@ -14,7 +14,8 @@ use WP_Error;
  *
  * @phpstan-type Size array{attachment: int, width: int, height: int, crop: bool|array{string, string}|null, mime: string, file: string, url: string, source: string, target: string}
  * @phpstan-type Found array{size: Size, exact: bool}
- * @phpstan-type Resolution array{action: 'serve', path: string, mime: string}|array{action: 'redirect', url: string, permanent: bool}
+ * @phpstan-type StandIn array{url: string, path: string, mime: string}
+ * @phpstan-type Resolution array{action: 'serve', path: string, mime: string}|array{action: 'redirect', url: string, permanent: bool}|array{action: 'stand-in', path: string, mime: string, size: Size}
  */
 final class Generator {
 
@@ -27,6 +28,13 @@ final class Generator {
 	 * Seconds before a failed size is tried again.
 	 */
 	private const RETRY_AFTER = 600;
+
+	/**
+	 * How long making a size may wait for locks: up to the wait filter, not at all, or only for a slot.
+	 */
+	private const WAIT  = 'wait';
+	private const NOW   = 'now';
+	private const LATER = 'later';
 
 	/**
 	 * Suffixes core adds to an attached file that its sizes do not carry.
@@ -92,11 +100,18 @@ final class Generator {
 	 * exists stands in on a temporary redirect, so the visitor never gets a
 	 * broken image.
 	 *
+	 * With $defer, a missing size is not waited for. It is made at once when a
+	 * resize slot is free, which for a small size takes tens of milliseconds
+	 * and saves sending a far heavier file. Otherwise a larger file that exists
+	 * is sent, and the caller makes the size with complete() once the response
+	 * is out.
+	 *
 	 * @param string $relative Path below the uploads base.
+	 * @param bool   $defer    Whether the caller can make the size after responding.
 	 * @return array|null Null when the path names no image of this site.
 	 * @phpstan-return Resolution|null
 	 */
-	public static function resolve( string $relative ): ?array {
+	public static function resolve( string $relative, bool $defer = false ): ?array {
 		$found = self::find( $relative );
 
 		if ( $found === null ) {
@@ -113,10 +128,21 @@ final class Generator {
 			];
 		}
 
+		if ( $defer && self::ensure( $size, false, self::NOW ) !== true ) {
+			$stand_in = self::stand_in( $size );
+
+			return [
+				'action' => 'stand-in',
+				'path'   => $stand_in['path'],
+				'mime'   => $stand_in['mime'],
+				'size'   => $size,
+			];
+		}
+
 		if ( is_wp_error( self::ensure( $size, false ) ) ) {
 			return [
 				'action'    => 'redirect',
-				'url'       => self::stand_in( $size ),
+				'url'       => self::stand_in( $size )['url'],
 				'permanent' => false,
 			];
 		}
@@ -126,6 +152,38 @@ final class Generator {
 			'path'   => $size['target'],
 			'mime'   => $size['mime'],
 		];
+	}
+
+	/**
+	 * Make a size that was answered with a stand-in, after the response went out.
+	 *
+	 * Skips a size another request is already making: nobody waits for this one.
+	 *
+	 * @param array $size Size from a stand-in resolution.
+	 * @phpstan-param Size $size
+	 * @return void
+	 */
+	public static function complete( array $size ): void {
+		self::ensure( $size, false, self::LATER );
+	}
+
+	/**
+	 * Whether a request can be answered before its size is made.
+	 *
+	 * Needs a way to end the response and keep running, which PHP-FPM and
+	 * LiteSpeed have. Elsewhere the visitor waits for the size, as before.
+	 *
+	 * @return bool
+	 */
+	public static function defers(): bool {
+		$can = PHP_SAPI !== 'cli' && ( function_exists( 'fastcgi_finish_request' ) || function_exists( 'litespeed_finish_request' ) );
+
+		/**
+		 * Filters whether a missing size is answered with a larger file at once and made afterwards.
+		 *
+		 * @param bool $defers True on PHP-FPM and LiteSpeed.
+		 */
+		return (bool) apply_filters( 'yourmark/image-sizes/defer', $can );
 	}
 
 	/**
@@ -371,12 +429,13 @@ final class Generator {
 	/**
 	 * Make a size's file unless it exists, remembering a failure for a while.
 	 *
-	 * @param array $size  Size from find().
-	 * @param bool  $retry Whether to ignore a remembered failure.
+	 * @param array  $size  Size from find().
+	 * @param bool   $retry Whether to ignore a remembered failure.
+	 * @param string $wait  WAIT, NOW or LATER.
 	 * @phpstan-param Size $size
 	 * @return true|WP_Error
 	 */
-	private static function ensure( array $size, bool $retry ) {
+	private static function ensure( array $size, bool $retry, string $wait = self::WAIT ) {
 		if ( file_exists( $size['target'] ) ) {
 			return true;
 		}
@@ -393,7 +452,7 @@ final class Generator {
 			return new WP_Error( 'yourmark_image_sizes_failed', $failed );
 		}
 
-		$made = self::generate( $size );
+		$made = self::generate( $size, $wait );
 
 		// A busy server is no fault of the image: the next request simply tries again.
 		if ( is_wp_error( $made ) && $made->get_error_code() !== 'yourmark_image_sizes_busy' ) {
@@ -405,24 +464,39 @@ final class Generator {
 	}
 
 	/**
-	 * URL of a file that exists and can stand in for a size: the nearest made size, else the attached file.
+	 * A file that exists and can stand in for a size: the smallest made size at least as wide, else the attached file.
 	 *
-	 * @param array $size Size that could not be made.
+	 * Never a smaller one, which the browser would stretch into a blur.
+	 *
+	 * @param array $size Size without a file.
 	 * @phpstan-param Size $size
-	 * @return string
+	 * @return array
+	 * @phpstan-return StandIn
 	 */
-	private static function stand_in( array $size ): string {
+	private static function stand_in( array $size ): array {
 		$meta      = wp_get_attachment_metadata( $size['attachment'] );
 		$directory = dirname( $size['source'] );
 		$made      = array_filter(
 			is_array( $meta ) ? (array) ( $meta['sizes'] ?? [] ) : [],
-			fn( $entry ): bool => is_array( $entry ) && ! empty( $entry['file'] ) && file_exists( $directory . '/' . basename( (string) $entry['file'] ) )
+			fn( $entry ): bool => is_array( $entry ) && ! empty( $entry['file'] ) && ! empty( $entry['width'] ) && (int) $entry['width'] >= $size['width'] && file_exists( $directory . '/' . basename( (string) $entry['file'] ) )
 		);
 		$nearest   = self::nearest( $made, $size['width'], $size['height'] );
 
-		return $nearest === null
-			? (string) wp_get_attachment_url( $size['attachment'] )
-			: dirname( $size['url'] ) . '/' . basename( (string) $made[ $nearest ]['file'] );
+		if ( $nearest === null ) {
+			return [
+				'url'  => (string) wp_get_attachment_url( $size['attachment'] ),
+				'path' => $size['source'],
+				'mime' => (string) get_post_mime_type( $size['attachment'] ),
+			];
+		}
+
+		$file = basename( (string) $made[ $nearest ]['file'] );
+
+		return [
+			'url'  => dirname( $size['url'] ) . "/{$file}",
+			'path' => "{$directory}/{$file}",
+			'mime' => (string) ( $made[ $nearest ]['mime-type'] ?? wp_check_filetype( $file )['type'] ),
+		];
 	}
 
 	/**
@@ -432,11 +506,16 @@ final class Generator {
 	 * and for a resize slot. Without it, a queue of requests for one file would
 	 * each wait in turn and tie up PHP workers.
 	 *
-	 * @param array $size Size from find().
+	 * NOW takes no lock that is not free at once, for a visitor who gets a
+	 * stand-in instead. LATER leaves a size another request is making to that
+	 * request, but waits its turn for a slot, since nobody waits for it.
+	 *
+	 * @param array  $size Size from find().
+	 * @param string $wait WAIT, NOW or LATER.
 	 * @phpstan-param Size $size
 	 * @return true|WP_Error
 	 */
-	private static function generate( array $size ) {
+	private static function generate( array $size, string $wait ) {
 		/**
 		 * Filters how many seconds a request waits, for the file and a resize slot together, before it gets a stand-in.
 		 *
@@ -444,7 +523,7 @@ final class Generator {
 		 */
 		$deadline  = microtime( true ) + max( 0, (int) apply_filters( 'yourmark/image-sizes/wait', 10 ) );
 		$lock_path = self::lock_dir() . md5( $size['target'] ) . '.lock';
-		$file_lock = self::acquire( [ $lock_path ], $deadline );
+		$file_lock = self::acquire( [ $lock_path ], $wait === self::WAIT ? $deadline : 0.0 );
 
 		if ( $file_lock === 'busy' ) {
 			return self::busy();
@@ -456,7 +535,7 @@ final class Generator {
 				return true;
 			}
 
-			$slot = self::acquire( self::slot_paths(), $deadline );
+			$slot = self::acquire( self::slot_paths(), $wait === self::NOW ? 0.0 : $deadline );
 
 			if ( $slot === 'busy' ) {
 				return self::busy();
@@ -599,7 +678,7 @@ final class Generator {
 			return null;
 		}
 
-		do {
+		while ( true ) {
 			foreach ( $handles as $index => $handle ) {
 				if ( flock( $handle, LOCK_EX | LOCK_NB ) ) {
 					unset( $handles[ $index ] );
@@ -609,8 +688,12 @@ final class Generator {
 				}
 			}
 
+			if ( microtime( true ) >= $deadline ) {
+				break;
+			}
+
 			usleep( 100000 );
-		} while ( microtime( true ) < $deadline );
+		}
 
 		array_walk( $handles, [ self::class, 'close' ] );
 

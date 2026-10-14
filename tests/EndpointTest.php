@@ -209,7 +209,7 @@ final class EndpointTest extends TestCase {
 		$response = Endpoint::respond( $this->uri( $id, $large ) );
 
 		$this->assertSame( 302, $response['status'] );
-		$this->assertStringEndsWith( '/' . $this->size_file( $id, 'medium' ), $response['headers']['Location'] );
+		$this->assertStringEndsWith( '/red.webp', $response['headers']['Location'], 'Not the smaller medium: a stand-in is never stretched.' );
 		$this->assertSame( 'no-store, max-age=0', $response['headers']['Cache-Control'] );
 		$this->assertFileExists( $this->lock_file( $id, $large ), 'A failure leaves its lock for the next try.' );
 
@@ -219,6 +219,68 @@ final class EndpointTest extends TestCase {
 		$this->assertIsArray( Generator::make( $this->relative( $id, $large ), true ), 'Asking on purpose tries again.' );
 		$this->assertFileExists( $this->path( $id, $large ) );
 		$this->assertFileDoesNotExist( $this->lock_file( $id, $large ), 'A success removes its lock.' );
+	}
+
+	public function test_where_it_can_finish_later_a_size_is_made_at_once_when_a_slot_is_free(): void {
+		add_filter( 'yourmark/image-sizes/defer', '__return_true' );
+		$id     = $this->upload( $this->image( 'red.jpg' ) );
+		$medium = $this->size_file( $id, 'medium' );
+
+		$response = Endpoint::respond( $this->uri( $id, $medium ) );
+
+		$this->assertSame( $this->path( $id, $medium ), $response['file'] );
+		$this->assertArrayNotHasKey( 'then', $response );
+	}
+
+	public function test_where_it_can_finish_later_a_busy_server_sends_a_larger_file_at_once(): void {
+		add_filter( 'yourmark/image-sizes/defer', '__return_true' );
+		$id     = $this->upload( $this->image( 'red.jpg' ) );
+		$medium = $this->size_file( $id, 'medium' );
+		$this->hold( $this->lock_dir() . 'slot-0.lock' );
+		$this->hold( $this->lock_dir() . 'slot-1.lock' );
+
+		$start    = microtime( true );
+		$response = Endpoint::respond( $this->uri( $id, $medium ) );
+		$this->release_locks();
+
+		$this->assertLessThan( 0.05, microtime( true ) - $start, 'No waiting for a slot.' );
+		$this->assertSame( 200, $response['status'] );
+		$this->assertSame( (string) get_attached_file( $id ), $response['file'] );
+		$this->assertSame( 'no-store, max-age=0', $response['headers']['Cache-Control'] );
+		$this->assertFileDoesNotExist( $this->path( $id, $medium ), 'Nobody waited for it.' );
+
+		Generator::complete( $response['then'] ?? [] );
+
+		$this->assertFileExists( $this->path( $id, $medium ) );
+		$this->assertSame( 'public, max-age=' . YEAR_IN_SECONDS, Endpoint::respond( $this->uri( $id, $medium ) )['headers']['Cache-Control'] );
+	}
+
+	public function test_a_stand_in_is_the_smallest_file_at_least_as_wide(): void {
+		$id = $this->upload( $this->image( 'red.jpg', 'red', 2400, 1800 ) );
+		Endpoint::respond( $this->uri( $id, $this->size_file( $id, 'medium' ) ) );
+		Endpoint::respond( $this->uri( $id, $this->size_file( $id, 'large' ) ) );
+		Endpoint::respond( $this->uri( $id, $this->size_file( $id, '1536x1536' ) ) );
+		add_filter( 'yourmark/image-sizes/defer', '__return_true' );
+		$this->hold( $this->lock_dir() . 'slot-0.lock' );
+		$this->hold( $this->lock_dir() . 'slot-1.lock' );
+
+		$response = Endpoint::respond( $this->uri( $id, $this->size_file( $id, 'yourmark-520w' ) ) );
+		$this->release_locks();
+
+		$this->assertSame( $this->path( $id, $this->size_file( $id, 'large' ) ), $response['file'] );
+	}
+
+	public function test_a_deferred_size_already_being_made_is_left_to_that_request(): void {
+		$id     = $this->upload( $this->image( 'red.jpg' ) );
+		$medium = $this->size_file( $id, 'medium' );
+		add_filter( 'yourmark/image-sizes/defer', '__return_true' );
+		$this->hold( $this->lock_file( $id, $medium ) );
+
+		$start = microtime( true );
+		Generator::complete( Endpoint::respond( $this->uri( $id, $medium ) )['then'] ?? [] );
+
+		$this->assertLessThan( 1, microtime( true ) - $start );
+		$this->assertFileDoesNotExist( $this->path( $id, $medium ) );
 	}
 
 	public function test_a_busy_server_gets_a_stand_in_without_remembering_a_failure(): void {

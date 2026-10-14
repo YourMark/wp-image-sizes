@@ -36,6 +36,26 @@ final class Sizes {
 	public const SEPARATOR = '--';
 
 	/**
+	 * Key that marks an in-between width: a srcset candidate, not a size anyone picks.
+	 */
+	public const STEP = 'yourmark_step';
+
+	/**
+	 * Widths offered between the registered sizes, so a browser never has to jump from 300 to 768.
+	 *
+	 * With core's sizes they make a ladder of about 1.25x per step: 300, 400,
+	 * 520, 640, 768, 1024, 1280, 1536, 2048. Wider steps leave a phone at
+	 * 1.75x past the 12 KiB Lighthouse lets a srcset waste; finer ones buy
+	 * nothing but files.
+	 */
+	private const STEPS = [ 400, 520, 640, 1280 ];
+
+	/**
+	 * A step this close to a width the image already offers adds a file and saves nothing.
+	 */
+	private const MIN_GAP = 1.15;
+
+	/**
 	 * Formats made lazily. GIF stays out: resizing one drops its animation.
 	 */
 	private const RESIZABLE = [ 'image/jpeg', 'image/png', 'image/webp', 'image/avif' ];
@@ -217,8 +237,14 @@ final class Sizes {
 		}
 
 		$extension = wp_get_default_extension_for_mime_type( $output_mime );
-		$stem      = self::lazy_stem( $data, $mime, $output_mime );
-		$base      = self::base();
+
+		// A format without a file extension could not be written under any name.
+		if ( $extension === false ) {
+			return $data;
+		}
+
+		$stem = self::lazy_stem( $data, $mime, $output_mime );
+		$base = self::base();
 
 		if ( ! isset( $data['sizes'] ) || ! is_array( $data['sizes'] ) ) {
 			$data['sizes'] = [];
@@ -247,7 +273,95 @@ final class Sizes {
 			];
 		}
 
+		return self::add_steps( $data, $stem, $extension, $output_mime );
+	}
+
+	/**
+	 * Widths a srcset may offer between the registered sizes.
+	 *
+	 * @return int[]
+	 */
+	public static function steps(): array {
+		/**
+		 * Filters the in-between widths. Each is only a name in the srcset until a browser asks for it.
+		 *
+		 * @param int[] $widths Widths in pixels.
+		 */
+		$widths = array_map( 'intval', (array) apply_filters( 'yourmark/image-sizes/steps', self::STEPS ) );
+
+		return array_values( array_unique( array_filter( $widths, fn( int $width ): bool => $width > 0 ) ) );
+	}
+
+	/**
+	 * Whether a metadata entry is an in-between width.
+	 *
+	 * @param mixed $size Entry from an attachment's sizes.
+	 * @return bool
+	 */
+	public static function is_step( $size ): bool {
+		return is_array( $size ) && ! empty( $size[ self::STEP ] );
+	}
+
+	/**
+	 * Add the in-between widths, in the upload's own proportions.
+	 *
+	 * Only widths well apart from the upload's own and from its sizes in the
+	 * same proportions. Core puts any entry with the right proportions in a
+	 * srcset, so these reach every image without touching a template, old
+	 * content included.
+	 *
+	 * @param array<string, mixed> $data        Attachment metadata with its sizes.
+	 * @param string               $stem        Name the lazy sizes carry.
+	 * @param string               $extension   Extension the lazy sizes are written with.
+	 * @param string               $output_mime MIME type the lazy sizes are written in.
+	 * @return array<string, mixed>
+	 */
+	private static function add_steps( array $data, string $stem, string $extension, string $output_mime ): array {
+		$width  = (int) $data['width'];
+		$height = (int) $data['height'];
+		$taken  = [ $width ];
+
+		foreach ( (array) $data['sizes'] as $size ) {
+			if ( is_array( $size ) && ! empty( $size['width'] ) && ! empty( $size['height'] ) && wp_image_matches_ratio( $width, $height, (int) $size['width'], (int) $size['height'] ) ) {
+				$taken[] = (int) $size['width'];
+			}
+		}
+
+		foreach ( self::steps() as $step ) {
+			if ( $step >= $width || self::near( $step, $taken ) ) {
+				continue;
+			}
+
+			$step_height = (int) max( 1, round( $height * $step / $width ) );
+
+			$data['sizes'][ "yourmark-{$step}w" ] = [
+				'width'     => $step,
+				'height'    => $step_height,
+				'file'      => "{$stem}-{$step}x{$step_height}.{$extension}",
+				'mime-type' => $output_mime,
+				self::LAZY  => true,
+				self::STEP  => true,
+			];
+		}
+
 		return $data;
+	}
+
+	/**
+	 * Whether a width lies within MIN_GAP of any of some others.
+	 *
+	 * @param int   $width  Width.
+	 * @param int[] $others Widths already offered.
+	 * @return bool
+	 */
+	private static function near( int $width, array $others ): bool {
+		foreach ( $others as $other ) {
+			if ( max( $width, $other ) < min( $width, $other ) * self::MIN_GAP ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

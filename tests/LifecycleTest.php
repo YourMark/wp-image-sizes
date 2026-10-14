@@ -133,7 +133,9 @@ final class LifecycleTest extends TestCase {
 		remove_filter( 'yourmark/image-sizes/enabled', '__return_false' );
 
 		foreach ( wp_get_attachment_metadata( $id )['sizes'] as $name => $size ) {
-			$this->assertFileExists( $this->path( $id, $size['file'] ), $name );
+			if ( ! Sizes::is_step( $size ) ) {
+				$this->assertFileExists( $this->path( $id, $size['file'] ), $name );
+			}
 		}
 	}
 
