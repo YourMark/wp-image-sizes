@@ -64,6 +64,16 @@ final class BaseTest extends TestCase {
 		$this->assertSame( 0, Sizes::make_base( $id ), 'Running again makes nothing.' );
 	}
 
+	public function test_until_an_older_upload_has_its_base_the_base_urls_keep_working(): void {
+		add_filter( 'yourmark/image-sizes/base', '__return_empty_array' );
+		$id = $this->upload( $this->image( 'red.jpg', 'red', 2400, 1800 ) );
+		remove_filter( 'yourmark/image-sizes/base', '__return_empty_array' );
+
+		$this->assertStringContainsString( 'red-768x576.webp 768w', wp_get_attachment_image( $id, 'large' ), 'Still offered in srcset.' );
+		$this->assertSame( 200, Endpoint::respond( $this->uri( $id, 'red-768x576.webp' ) )['status'], 'Made on request, not sent elsewhere.' );
+		$this->assertSame( 1, Sizes::make_base( $id ), 'Only 1536 was left to make.' );
+	}
+
 	public function test_pruning_keeps_the_base(): void {
 		$id = $this->upload( $this->image( 'red.jpg', 'red', 2400, 1800 ) );
 

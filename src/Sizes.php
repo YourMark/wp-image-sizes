@@ -133,9 +133,9 @@ final class Sizes {
 	/**
 	 * Make the base sizes an upload does not have yet.
 	 *
-	 * Core works out what is missing from the registered sizes minus those in
-	 * the metadata, and the lazy sizes are in the metadata already, so only the
-	 * base is made. An animation is left alone: resizing keeps its first frame.
+	 * Until made, a base size is a lazy size like any other, so it is made the
+	 * same way, under the same name. An animation is left alone: resizing keeps
+	 * its first frame.
 	 *
 	 * @param int $attachment_id Attachment ID.
 	 * @return int|\WP_Error Number of sizes made.
@@ -145,21 +145,36 @@ final class Sizes {
 			return 0;
 		}
 
-		require_once ABSPATH . 'wp-admin/includes/image.php';
+		$meta = wp_get_attachment_metadata( $attachment_id );
 
-		$missing = count( wp_get_missing_image_subsizes( $attachment_id ) );
-
-		if ( $missing === 0 ) {
+		if ( ! is_array( $meta ) || empty( $meta['file'] ) ) {
 			return 0;
 		}
 
-		$updated = wp_update_image_subsizes( $attachment_id );
+		$directory = dirname( (string) $meta['file'] );
+		$prefix    = $directory === '.' ? '' : "{$directory}/";
+		$basedir   = wp_get_upload_dir()['basedir'];
+		$made      = 0;
 
-		if ( is_wp_error( $updated ) ) {
-			return $updated;
+		foreach ( self::base() as $name ) {
+			$size = $meta['sizes'][ $name ] ?? null;
+
+			if ( ! is_array( $size ) || empty( $size['file'] ) || file_exists( "{$basedir}/{$prefix}{$size['file']}" ) ) {
+				continue;
+			}
+
+			$result = Generator::make( $prefix . $size['file'], true );
+
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+
+			if ( is_array( $result ) ) {
+				++$made;
+			}
 		}
 
-		return $missing - count( wp_get_missing_image_subsizes( $attachment_id ) );
+		return $made;
 	}
 
 	/**
@@ -290,14 +305,14 @@ final class Sizes {
 		}
 
 		$stem = self::lazy_stem( $data, $mime, $output_mime );
-		$base = self::base();
 
 		if ( ! isset( $data['sizes'] ) || ! is_array( $data['sizes'] ) ) {
 			$data['sizes'] = [];
 		}
 
 		foreach ( wp_get_registered_image_subsizes() as $size_name => $size ) {
-			if ( isset( $data['sizes'][ $size_name ] ) || in_array( $size_name, $base, true ) ) {
+			// A base size not made yet stays lazy too, so a URL to it keeps working until `base` makes it.
+			if ( isset( $data['sizes'][ $size_name ] ) ) {
 				continue;
 			}
 
