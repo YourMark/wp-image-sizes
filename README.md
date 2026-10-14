@@ -17,8 +17,8 @@ Works with any theme. It hooks into core's attachment metadata, so `srcset`,
    original. An animation gets no base: resizing keeps its first frame.
    `wp image-sizes base` makes the base for uploads from before, and
    converting an older upload makes it in the new format.
-   Every registered size is added to the metadata when it is read, never
-   stored. A size registered later works for every existing upload at once.
+   Every other registered size is added to the metadata when it is read,
+   never stored. A size registered later works for every existing upload at once.
    A size in another format than its source carries the source extension
    after two hyphens (`photo--jpg-300x200.webp`), so `photo.jpg` and
    `photo.png` in one folder never share size files. No upload can collide
@@ -72,8 +72,13 @@ Works with any theme. It hooks into core's attachment metadata, so `srcset`,
 3. **Warming:** saving a published post queues its page; widgets, the
    customiser, template parts and a theme switch queue the front page. A
    minute later a cron job fetches the page and makes each img's `src`, image
-   preloads and share images. Other `srcset` candidates depend on the
-   visitor's screen and wait for a browser that picks one.
+   preloads and share images. For every image that is not lazy, which is what
+   is above the fold and decides LCP, it also makes the `srcset` candidate a
+   browser would pick on five screens: a 390px phone at 3x, Lighthouse's
+   412px phone at 1.75x, a 768px tablet at 2x and a 1440px laptop at 1x and
+   2x. That is worked out from `sizes` as the browser does, so nothing a
+   visitor would not load is made. Lazy images wait for a browser; until
+   then the base stands in.
 
 ## Servers
 

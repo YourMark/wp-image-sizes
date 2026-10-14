@@ -160,14 +160,10 @@ final class Srcset {
 			return $srcset;
 		}
 
-		$candidates = [];
+		$candidates = self::candidates( $srcset );
 
-		foreach ( explode( ',', $srcset ) as $candidate ) {
-			if ( ! preg_match( '/^(\S+)\s+(\d+)w$/', trim( $candidate ), $match ) ) {
-				return $srcset;
-			}
-
-			$candidates[ (int) $match[2] ] = $match[1];
+		if ( ! $candidates ) {
+			return $srcset;
 		}
 
 		ksort( $candidates );
@@ -222,6 +218,104 @@ final class Srcset {
 		}
 
 		return $widest > 0 ? $widest : null;
+	}
+
+	/**
+	 * How wide sizes says an image is painted on a screen of a given width, in CSS pixels.
+	 *
+	 * The first entry whose condition matches wins, as in the browser. Reads
+	 * min-width and max-width conditions joined by "and", and lengths in px,
+	 * rem, em and vw.
+	 *
+	 * @param string $sizes    Sizes attribute.
+	 * @param int    $viewport Viewport width in CSS pixels.
+	 * @return float|null Null for auto, calc() or anything else this cannot read.
+	 */
+	public static function slot_at( string $sizes, int $viewport ): ?float {
+		foreach ( explode( ',', $sizes ) as $entry ) {
+			$entry = trim( $entry );
+
+			if ( ! preg_match( '/^(?:(\(.*\))\s+)?([\d.]+)(px|r?em|vw)$/i', $entry, $match ) ) {
+				return null;
+			}
+
+			[ , $media, $number, $unit ] = $match;
+
+			if ( $media !== '' && ! self::matches( $media, $viewport ) ) {
+				continue;
+			}
+
+			return strtolower( $unit ) === 'vw' ? $viewport * (float) $number / 100 : (float) self::pixels( $number . $unit );
+		}
+
+		return null;
+	}
+
+	/**
+	 * Whether a media condition of min-width and max-width tests holds at a viewport width.
+	 *
+	 * @param string $media    Condition, such as (min-width: 48rem) and (max-width: 80rem).
+	 * @param int    $viewport Viewport width in CSS pixels.
+	 * @return bool False also for a condition this cannot read.
+	 */
+	private static function matches( string $media, int $viewport ): bool {
+		foreach ( (array) preg_split( '/\s+and\s+/i', $media ) as $test ) {
+			if ( ! preg_match( '/^\(\s*(min|max)-width:\s*([\d.]+(?:px|r?em))\s*\)$/i', trim( (string) $test ), $match ) ) {
+				return false;
+			}
+
+			$width = (float) self::pixels( $match[2] );
+
+			if ( strtolower( $match[1] ) === 'min' ? $viewport < $width : $viewport > $width ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * The srcset candidate a browser picks: the narrowest wide enough for the slot at this density.
+	 *
+	 * @param array<int, string> $candidates URLs keyed by width.
+	 * @param float              $slot       Painted width in CSS pixels.
+	 * @param float              $density    Device pixel ratio.
+	 * @return string|null
+	 */
+	public static function pick( array $candidates, float $slot, float $density ): ?string {
+		if ( ! $candidates ) {
+			return null;
+		}
+
+		ksort( $candidates );
+
+		foreach ( $candidates as $width => $url ) {
+			if ( $width >= $slot * $density ) {
+				return $url;
+			}
+		}
+
+		return $candidates[ array_key_last( $candidates ) ];
+	}
+
+	/**
+	 * A srcset's candidates, URLs keyed by width.
+	 *
+	 * @param string $srcset Srcset with width descriptors.
+	 * @return array<int, string> Empty when any candidate has another descriptor.
+	 */
+	public static function candidates( string $srcset ): array {
+		$candidates = [];
+
+		foreach ( explode( ',', $srcset ) as $candidate ) {
+			if ( ! preg_match( '/^(\S+)\s+(\d+)w$/', trim( $candidate ), $match ) ) {
+				return [];
+			}
+
+			$candidates[ (int) $match[2] ] = $match[1];
+		}
+
+		return $candidates;
 	}
 
 	/**

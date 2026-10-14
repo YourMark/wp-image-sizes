@@ -15,9 +15,11 @@ use WP_Post;
  *
  * Reading the rendered page rather than post content catches every image the
  * page shows: header, footer, widgets, template parts and whatever a plugin or
- * template prints with wp_get_attachment_image(). Only an img's src, preloads
- * and share images are made. The other srcset candidates depend on the
- * visitor's screen and wait for a browser that picks them.
+ * template prints with wp_get_attachment_image(). Made are each img's src,
+ * preloads and share images, and for an image that is not lazy, the srcset
+ * candidate each of a few common screens picks. Those are above the fold and
+ * decide LCP; a lazy image waits for a browser, and meanwhile the base
+ * stands in.
  */
 final class Warmer {
 
@@ -30,6 +32,13 @@ final class Warmer {
 	 * Option holding the URLs waiting to be warmed.
 	 */
 	private const QUEUE = 'yourmark_image_sizes_warm_queue';
+
+	/**
+	 * Screens whose srcset pick is made ahead: viewport width and device pixel ratio.
+	 *
+	 * A phone, Lighthouse's phone, a tablet, and a laptop with and without a retina screen.
+	 */
+	private const SCREENS = [ [ 390, 3.0 ], [ 412, 1.75 ], [ 768, 2.0 ], [ 1440, 1.0 ], [ 1440, 2.0 ] ];
 
 	/**
 	 * Post types that change what every page shows rather than a page of their own.
@@ -187,7 +196,7 @@ final class Warmer {
 	}
 
 	/**
-	 * Image URLs every visitor of a page loads: img src, image preloads and share images.
+	 * Image URLs a page's visitors load first: img src, image preloads, share images and the picks of eager images.
 	 *
 	 * @param string $html Page HTML.
 	 * @return string[]
@@ -197,6 +206,10 @@ final class Warmer {
 		$urls = [];
 
 		while ( $tags->next_tag() ) {
+			if ( $tags->get_tag() === 'IMG' && $tags->get_attribute( 'loading' ) !== 'lazy' ) {
+				array_push( $urls, ...self::picks( (string) $tags->get_attribute( 'srcset' ), (string) $tags->get_attribute( 'sizes' ) ) );
+			}
+
 			$url = match ( $tags->get_tag() ) {
 				'IMG' => $tags->get_attribute( 'src' ),
 				'LINK' => $tags->get_attribute( 'rel' ) === 'preload' && $tags->get_attribute( 'as' ) === 'image' ? $tags->get_attribute( 'href' ) : null,
@@ -210,6 +223,36 @@ final class Warmer {
 		}
 
 		return array_unique( $urls );
+	}
+
+	/**
+	 * The srcset candidates the common screens pick for an image.
+	 *
+	 * Worked out as the browser does, from sizes and the widths in srcset, so
+	 * only what a visitor would load is made.
+	 *
+	 * @param string $srcset Srcset attribute.
+	 * @param string $sizes  Sizes attribute.
+	 * @return string[] URLs.
+	 */
+	public static function picks( string $srcset, string $sizes ): array {
+		$candidates = Srcset::candidates( $srcset );
+		$picks      = [];
+
+		if ( ! $candidates || $sizes === '' ) {
+			return [];
+		}
+
+		foreach ( self::SCREENS as [ $viewport, $density ] ) {
+			$slot = Srcset::slot_at( $sizes, $viewport );
+			$pick = $slot === null ? null : Srcset::pick( $candidates, $slot, $density );
+
+			if ( $pick !== null ) {
+				$picks[] = $pick;
+			}
+		}
+
+		return array_values( array_unique( $picks ) );
 	}
 
 	/**
