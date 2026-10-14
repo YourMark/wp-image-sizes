@@ -20,10 +20,35 @@ Works with any theme. It hooks into core's attachment metadata, so `srcset`,
    The block editor's in-browser processing (WordPress 7.1) is switched off
    while sizes are lazy: it only scales and rotates a camera photo as part
    of making sizes, and the server does both anyway.
+   - **In-between widths:** beside the registered sizes, the metadata lists
+     400, 520, 640 and 1280 (`yourmark/image-sizes/steps`), below the
+     upload's own width, in its proportions and skipped within 15% of a width
+     already offered. With core's sizes that is a ladder of about 1.25x:
+     300, 400, 520, 640, 768, 1024, 1280, 1536, 2048. Core puts them in every
+     `srcset`, old content included. They are names only: a file exists once
+     a browser asked for it. Making every size of an image, from the admin or
+     `convert`, leaves them out.
+   - **A srcset per placement:** an image block without a `sizes` gets one from
+     its place in the block tree: the theme's `contentSize` and `wideSize`,
+     alignment, and columns, passed from parent to child while rendering.
+     Then every `srcset`, in content and templates, drops the candidates past
+     the first one at least twice the widest slot its `sizes` names. Density
+     is capped at 2x, as Next.js, Astro and Twitter do. A `sizes` without an
+     upper bound (`100vw`, `calc()`) keeps the whole list.
+   - **Per site:** a layout the blocks do not describe, such as a grid in the
+     theme's CSS, is invisible to this. Set `sizes` on those images in the
+     theme, as `app/filters.php` does for the project cards; the plugin keeps
+     a `sizes` that is already there.
 2. **First request:** WordPress checks that the file name belongs to an image
    of this site, makes the size its metadata lists, sends it and leaves it on
    disk. Nobody can request made-up dimensions: only sizes in the metadata are
    ever made.
+   - On PHP-FPM and LiteSpeed (`yourmark/image-sizes/defer`) the visitor does
+     not wait for the resize. The smallest file that exists and is at least as
+     wide, else the original, is sent at once with `no-store`, and the size is
+     made once the response is out. The next request gets the size itself.
+     Check that no CDN rule caches images regardless of `Cache-Control`, or the
+     stand-in sticks.
    - A name from before a format switch, a change in dimensions or a
      conversion to a new file name gets a 301 to the size that replaced it, so
      URLs saved in content keep working. Among images that share a name, the
@@ -33,7 +58,8 @@ Works with any theme. It hooks into core's attachment metadata, so `srcset`,
    - At most two images are resized at once (`yourmark/image-sizes/concurrency`);
      each holds 150 to 350 MB. A request that waits more than ten seconds in all
      (`yourmark/image-sizes/wait`), or asks for a size that failed in the last
-     ten minutes, gets a temporary redirect to the nearest size that exists.
+     ten minutes, gets a temporary redirect to the smallest file that exists
+     and is at least as wide.
      Problems are logged once an hour. The buttons in the admin always retry.
    - A request through the PHP URL that names no image gets a 404.
 3. **Warming:** saving a published post queues its page; widgets, the
@@ -172,6 +198,9 @@ and `WP_TESTS_DB_HOST`.
 - `yourmark/image-sizes/concurrency`: images resized at once. Default 2.
 - `yourmark/image-sizes/wait`: seconds a request waits for its turn. Default 10.
 - `yourmark/image-sizes/enabled`: switch lazy sizes off.
+- `yourmark/image-sizes/steps`: in-between widths offered in `srcset`.
+- `yourmark/image-sizes/defer`: answer a missing size with a larger file at
+  once and make it afterwards. On by default where PHP can end a response early.
 - `yourmark/image-sizes/lock-dir`: where lock files go. Defaults to
   `wp-content/cache/yourmark-image-sizes`; point every site on a server at one
   directory to share the resize slots between them.

@@ -149,7 +149,8 @@ final class Converter {
 		$made      = 0;
 
 		foreach ( (array) ( $meta['sizes'] ?? [] ) as $size ) {
-			if ( ! is_array( $size ) || empty( $size['file'] ) ) {
+			// In-between widths wait for a browser that wants them.
+			if ( ! is_array( $size ) || empty( $size['file'] ) || Sizes::is_step( $size ) ) {
 				continue;
 			}
 

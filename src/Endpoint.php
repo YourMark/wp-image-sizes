@@ -14,7 +14,8 @@ namespace YourMark\ImageSizes;
  * uploads to WordPress, or the page pointed at the PHP URL from Urls because
  * the server does not. Either way the file is on disk afterwards.
  *
- * @phpstan-type Response array{status: int, headers: array<string, string>, file: string|null}
+ * @phpstan-import-type Size from Generator
+ * @phpstan-type Response array{status: int, headers: array<string, string>, file: string|null, then?: Size}
  */
 final class Endpoint {
 
@@ -71,6 +72,11 @@ final class Endpoint {
 			readfile( $response['file'] );
 		}
 
+		if ( isset( $response['then'] ) ) {
+			self::finish_response();
+			Generator::complete( $response['then'] );
+		}
+
 		exit;
 	}
 
@@ -93,7 +99,7 @@ final class Endpoint {
 
 		$php_url  = isset( $query[ self::PARAM ] );
 		$relative = $relative ?? Generator::relative_path( $uri );
-		$result   = $relative === null ? null : Generator::resolve( $relative );
+		$result   = $relative === null ? null : Generator::resolve( $relative, Generator::defers() );
 
 		if ( $result === null ) {
 			return $php_url ? self::not_found() : null;
@@ -117,6 +123,20 @@ final class Endpoint {
 			];
 		}
 
+		if ( $result['action'] === 'stand-in' ) {
+			// Not kept anywhere, Cloudflare included: the next request gets the real size.
+			return [
+				'status'  => 200,
+				'headers' => [
+					'Content-Type'   => $result['mime'],
+					'Content-Length' => (string) filesize( $result['path'] ),
+					'Cache-Control'  => 'no-store, max-age=0',
+				],
+				'file'    => $result['path'],
+				'then'    => $result['size'],
+			];
+		}
+
 		// The PHP URL stays in a page only until its next render, and an image replaced under the same name changes behind it.
 		$max_age = $php_url ? DAY_IN_SECONDS : YEAR_IN_SECONDS;
 
@@ -129,6 +149,21 @@ final class Endpoint {
 			],
 			'file'    => $result['path'],
 		];
+	}
+
+	/**
+	 * Send the response to the visitor and keep running.
+	 *
+	 * @return void
+	 */
+	private static function finish_response(): void {
+		ignore_user_abort( true );
+
+		if ( function_exists( 'fastcgi_finish_request' ) ) {
+			fastcgi_finish_request();
+		} elseif ( function_exists( 'litespeed_finish_request' ) ) {
+			litespeed_finish_request();
+		}
 	}
 
 	/**

@@ -7,6 +7,7 @@
 
 namespace YourMark\ImageSizes\Tests;
 
+use YourMark\ImageSizes\Converter;
 use YourMark\ImageSizes\Endpoint;
 use YourMark\ImageSizes\Formats;
 use YourMark\ImageSizes\Sizes;
@@ -28,13 +29,50 @@ final class SizesTest extends TestCase {
 
 	public function test_every_registered_size_is_listed_as_lazy(): void {
 		$id    = $this->upload( $this->image( 'red.jpg' ) );
-		$sizes = wp_get_attachment_metadata( $id )['sizes'];
+		$sizes = array_filter( wp_get_attachment_metadata( $id )['sizes'], fn( array $size ): bool => ! Sizes::is_step( $size ) );
 
 		ksort( $sizes );
 
 		$this->assertSame( [ 'large', 'medium', 'medium_large', 'thumbnail' ], array_keys( $sizes ) );
 		$this->assertSame( 'red-768x576.webp', $sizes['medium_large']['file'] );
 		$this->assertTrue( $sizes['medium'][ Sizes::LAZY ] );
+	}
+
+	public function test_in_between_widths_fill_the_gaps_the_registered_sizes_leave(): void {
+		$id    = $this->upload( $this->image( 'red.jpg' ) );
+		$sizes = wp_get_attachment_metadata( $id )['sizes'];
+		$steps = array_filter( $sizes, [ Sizes::class, 'is_step' ] );
+
+		$this->assertSame( [ 400, 520, 640 ], array_values( array_column( $steps, 'width' ) ), '1280 is past the upload\'s 1200.' );
+		$this->assertSame( 'red-520x390.webp', $sizes['yourmark-520w']['file'] );
+		$this->assertCount( 4, array_diff_key( $sizes, $steps ), 'Beside the four registered sizes.' );
+	}
+
+	public function test_an_in_between_width_close_to_one_already_offered_is_left_out(): void {
+		add_filter( 'yourmark/image-sizes/steps', fn(): array => [ 300, 330, 640, 700, 1100 ] );
+		$id = $this->upload( $this->image( 'red.jpg' ) );
+
+		$this->assertSame( [ 640 ], array_values( array_column( array_filter( wp_get_attachment_metadata( $id )['sizes'], [ Sizes::class, 'is_step' ] ), 'width' ) ) );
+	}
+
+	public function test_in_between_widths_reach_every_srcset_old_content_included(): void {
+		$id   = $this->upload( $this->image( 'red.jpg' ) );
+		$file = $this->size_file( $id, 'medium' );
+		$url  = wp_get_upload_dir()['baseurl'] . '/' . $this->relative( $id, $file );
+
+		$this->assertStringContainsString( 'red-520x390.webp 520w', wp_get_attachment_image( $id, 'large' ) );
+
+		$old = wp_filter_content_tags( "<p><img src=\"{$url}\" width=\"300\" height=\"225\" class=\"wp-image-{$id}\"></p>" );
+		$this->assertStringContainsString( 'red-400x300.webp 400w', $old );
+	}
+
+	public function test_in_between_widths_wait_for_a_browser_even_when_every_size_is_made(): void {
+		$id = $this->upload( $this->image( 'red.jpg' ) );
+
+		$this->assertSame( 4, Converter::make_sizes( $id, false ) );
+		$this->assertFileDoesNotExist( $this->path( $id, 'red-520x390.webp' ) );
+		$this->assertSame( 200, Endpoint::respond( $this->uri( $id, 'red-520x390.webp' ) )['status'] );
+		$this->assertFileExists( $this->path( $id, 'red-520x390.webp' ) );
 	}
 
 	public function test_the_browser_is_asked_for_no_sizes_after_an_upload(): void {
