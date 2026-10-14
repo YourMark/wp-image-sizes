@@ -85,11 +85,20 @@ Both work without any server change. To give new sizes their final URL on an
 nginx host that refuses missing images, put this before its static-file block:
 
 ```nginx
-location ~* ^/app/uploads/.+\.(?:avif|jpe?g|png|webp)$ {
+# Only names like photo-300x200.webp; every other file keeps its own handling.
+location ~* ^/app/uploads/.+-\d+x\d+\.(?:avif|jpe?g|png|webp)$ {
     try_files $uri /index.php?$args;
-    expires max;
+    expires 1y;
+    access_log off;
 }
 ```
+
+nginx uses the first regex `location` that matches, so this one has to come
+before any rule for image files, such as a caching rule. On SpinupWP that rule
+is in `server/static-files.conf`, and the files in that directory load in
+alphabetical order: name this one `00-yourmark-image-sizes.conf` in
+`/etc/nginx/sites-available/{DOMAIN}/server/`, then run
+`sudo nginx -t && sudo service nginx reload` and `wp image-sizes check`.
 
 On a standard WordPress install, use `wp-content/uploads` in the path.
 
