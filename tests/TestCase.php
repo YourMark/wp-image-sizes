@@ -45,6 +45,9 @@ abstract class TestCase extends WP_UnitTestCase {
 		$this->empty_uploads();
 		update_option( 'yourmark_image_format', 'webp' );
 		$this->routing( true );
+
+		// Without the base, so a test sees lazy sizes on their own; BaseTest covers the base.
+		add_filter( 'yourmark/image-sizes/base', '__return_empty_array' );
 	}
 
 	/**

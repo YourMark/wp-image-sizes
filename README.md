@@ -10,7 +10,13 @@ Works with any theme. It hooks into core's attachment metadata, so `srcset`,
 
 ## How it works
 
-1. **Upload:** the original is stored in the chosen format (Settings > Media).
+1. **Upload:** the original is stored in the chosen format (Settings > Media),
+   with two base sizes, core's 768 and 1536 (`yourmark/image-sizes/base`).
+   Every other width is at most a step below one of them, so a size that does
+   not exist yet is always stood in for by an optimised file rather than the
+   original. An animation gets no base: resizing keeps its first frame.
+   `wp image-sizes base` makes the base for uploads from before, and
+   converting an older upload makes it in the new format.
    Every registered size is added to the metadata when it is read, never
    stored. A size registered later works for every existing upload at once.
    A size in another format than its source carries the source extension
@@ -162,6 +168,8 @@ wp image-sizes check                    # test the server
 wp image-sizes warm                     # warm every page in the sitemap
 wp image-sizes warm <url>...            # only these pages
 wp image-sizes convert                  # store older uploads in the chosen format
+wp image-sizes base                     # make the base sizes for older uploads
+wp image-sizes base --limit=500         # at most 500 uploads, for a large library over several nights
 wp image-sizes prune --dry-run          # list size files nothing refers to
 wp image-sizes prune --stored           # also delete sizes made at upload
 ```
@@ -198,7 +206,8 @@ and `WP_TESTS_DB_HOST`.
 
 ## Filters
 
-- `yourmark/image-sizes/base`: sizes still made at upload. None by default.
+- `yourmark/image-sizes/base`: sizes made at upload. `medium_large` and
+  `1536x1536` by default.
 - `yourmark/image-sizes/concurrency`: images resized at once. Default 2.
 - `yourmark/image-sizes/wait`: seconds a request waits for its turn. Default 10.
 - `yourmark/image-sizes/enabled`: switch lazy sizes off.

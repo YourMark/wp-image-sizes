@@ -126,6 +126,68 @@ final class Command {
 	}
 
 	/**
+	 * Make the base sizes for uploads from before they were made at upload.
+	 *
+	 * A size that does not exist yet is stood in for by the smallest file at
+	 * least as wide, so with the base in place that is never the original.
+	 * Safe to run again: uploads that have their base are skipped.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--limit=<number>]
+	 * : Stop after this many uploads got sizes, to spread a large library over several runs.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp image-sizes base
+	 *     wp image-sizes base --limit=500
+	 *
+	 * @param string[]             $args       Unused.
+	 * @param array<string, mixed> $assoc_args Flags.
+	 * @return void
+	 */
+	public function base( array $args, array $assoc_args ): void {
+		if ( ! Sizes::enabled() ) {
+			WP_CLI::error( 'Sizes are made at upload on this site, so every upload has them.' );
+		}
+
+		$limit    = max( 0, (int) Utils\get_flag_value( $assoc_args, 'limit', 0 ) );
+		$progress = Utils\make_progress_bar( 'Making base sizes', Library::count() );
+		$uploads  = 0;
+		$made     = 0;
+		$after    = 0;
+
+		do {
+			$ids = Library::image_ids( $after, self::BATCH );
+
+			foreach ( $ids as $id ) {
+				$after  = $id;
+				$result = Sizes::make_base( $id );
+				$progress->tick();
+
+				if ( is_wp_error( $result ) ) {
+					WP_CLI::warning( "Attachment {$id}: {$result->get_error_message()}" );
+					continue;
+				}
+
+				if ( $result > 0 ) {
+					$made += $result;
+					++$uploads;
+				}
+
+				if ( $limit > 0 && $uploads >= $limit ) {
+					break 2;
+				}
+			}
+
+			$full = count( $ids ) === self::BATCH;
+		} while ( $full );
+
+		$progress->finish();
+		WP_CLI::success( "Made {$made} base sizes for {$uploads} uploads." );
+	}
+
+	/**
 	 * Delete size files that nothing needs.
 	 *
 	 * Removes files this plugin made that no size lists any more, such as sizes

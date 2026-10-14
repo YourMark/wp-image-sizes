@@ -66,7 +66,7 @@ final class Sizes {
 	 * @return void
 	 */
 	public static function register(): void {
-		add_filter( 'intermediate_image_sizes_advanced', [ self::class, 'keep_base_sizes' ], 10, 2 );
+		add_filter( 'intermediate_image_sizes_advanced', [ self::class, 'keep_base_sizes' ], 10, 3 );
 		add_filter( 'wp_generate_attachment_metadata', [ self::class, 'mark_animated' ], 5, 2 );
 		add_filter( 'wp_get_attachment_metadata', [ self::class, 'add_lazy_sizes' ], 10, 2 );
 		add_filter( 'wp_update_attachment_metadata', [ self::class, 'remove_lazy_sizes' ] );
@@ -108,18 +108,58 @@ final class Sizes {
 	}
 
 	/**
-	 * Size names still made at upload.
+	 * Sizes made at upload by default: core's 768 and 1536.
+	 *
+	 * Every other width is at most one step on the ladder below one of these,
+	 * so a size that does not exist yet can always be stood in for by an
+	 * optimised file rather than the original.
+	 */
+	private const BASE = [ 'medium_large', '1536x1536' ];
+
+	/**
+	 * Size names made at upload, and by `wp image-sizes base` for older uploads.
 	 *
 	 * @return string[]
 	 */
 	public static function base(): array {
 		/**
-		 * Filters the sizes made at upload. None by default: the media library's
-		 * first look at a new upload makes the one it shows.
+		 * Filters the sizes made at upload.
 		 *
 		 * @param string[] $sizes Size names.
 		 */
-		return (array) apply_filters( 'yourmark/image-sizes/base', [] );
+		return array_values( (array) apply_filters( 'yourmark/image-sizes/base', self::BASE ) );
+	}
+
+	/**
+	 * Make the base sizes an upload does not have yet.
+	 *
+	 * Core works out what is missing from the registered sizes minus those in
+	 * the metadata, and the lazy sizes are in the metadata already, so only the
+	 * base is made. An animation is left alone: resizing keeps its first frame.
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 * @return int|\WP_Error Number of sizes made.
+	 */
+	public static function make_base( int $attachment_id ) {
+		if ( ! self::enabled() || self::is_animated( $attachment_id ) ) {
+			return 0;
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+
+		$missing = count( wp_get_missing_image_subsizes( $attachment_id ) );
+
+		if ( $missing === 0 ) {
+			return 0;
+		}
+
+		$updated = wp_update_image_subsizes( $attachment_id );
+
+		if ( is_wp_error( $updated ) ) {
+			return $updated;
+		}
+
+		return $missing - count( wp_get_missing_image_subsizes( $attachment_id ) );
 	}
 
 	/**
@@ -199,13 +239,19 @@ final class Sizes {
 	 * what to make, which reads metadata with the lazy sizes already in it, so the
 	 * browser makes the same base sizes this does on the server.
 	 *
-	 * @param array<string, array<string, mixed>> $sizes      Sizes to make, keyed by name.
-	 * @param array<string, mixed>                $image_meta Metadata of the upload.
+	 * @param array<string, array<string, mixed>> $sizes         Sizes to make, keyed by name.
+	 * @param array<string, mixed>                $image_meta    Metadata of the upload.
+	 * @param int                                 $attachment_id Attachment ID; 0 when unknown.
 	 * @return array<string, array<string, mixed>>
 	 */
-	public static function keep_base_sizes( array $sizes, array $image_meta ): array {
+	public static function keep_base_sizes( array $sizes, array $image_meta, int $attachment_id = 0 ): array {
 		if ( ! self::enabled() || self::resizable_mime( (string) ( $image_meta['file'] ?? '' ) ) === null ) {
 			return $sizes;
+		}
+
+		// Resizing an animation keeps its first frame, so it gets no base.
+		if ( $attachment_id > 0 && self::is_animated( $attachment_id ) ) {
+			return [];
 		}
 
 		return array_intersect_key( $sizes, array_flip( self::base() ) );

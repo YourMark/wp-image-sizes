@@ -89,6 +89,9 @@ final class Converter {
 			]
 		);
 
+		// The base in the old format just made way; a failure here only means stand-ins use the original for a while.
+		Sizes::make_base( $attachment_id );
+
 		return true;
 	}
 
