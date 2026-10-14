@@ -117,7 +117,8 @@ final class Warmer {
 			return 0;
 		}
 
-		$response = wp_safe_remote_get( $url, self::request_args( 0 ) );
+		// A page cache would hand back HTML from before a change in sizes; a query string makes the usual ones pass.
+		$response = wp_safe_remote_get( add_query_arg( 'yourmark-warm', '1', $url ), self::request_args( 0 ) );
 
 		if ( wp_remote_retrieve_response_code( $response ) !== 200 ) {
 			return 0;

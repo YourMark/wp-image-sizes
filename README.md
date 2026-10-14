@@ -15,8 +15,9 @@ Works with any theme. It hooks into core's attachment metadata, so `srcset`,
    Every other width is at most a step below one of them, so a size that does
    not exist yet is always stood in for by an optimised file rather than the
    original. An animation gets no base: resizing keeps its first frame.
-   `wp image-sizes base` makes the base for uploads from before, and
-   converting an older upload makes it in the new format.
+   For an upload from before, a base size is lazy like any other until
+   `wp image-sizes base` makes it, so its URL keeps working in between.
+   Converting an older upload makes the base in the new format.
    Every other registered size is added to the metadata when it is read,
    never stored. A size registered later works for every existing upload at once.
    A size in another format than its source carries the source extension
@@ -71,7 +72,7 @@ Works with any theme. It hooks into core's attachment metadata, so `srcset`,
    - A request through the PHP URL that names no image gets a 404.
 3. **Warming:** saving a published post queues its page; widgets, the
    customiser, template parts and a theme switch queue the front page. A
-   minute later a cron job fetches the page and makes each img's `src`, image
+   minute later a cron job fetches the page, past any page cache, and makes each img's `src`, image
    preloads and share images. For every image that is not lazy, which is what
    is above the fold and decides LCP, it also makes the `srcset` candidate a
    browser would pick on five screens: a 390px phone at 3x, Lighthouse's
