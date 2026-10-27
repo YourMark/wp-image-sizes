@@ -25,7 +25,8 @@ final class Health {
 	public const PROBE = 'yourmark-image-sizes-probe-1x1.webp';
 
 	/**
-	 * Option holding the last result: ok and checked, a timestamp.
+	 * Option holding the last result: ok and checked, a timestamp. A network
+	 * option on a network, since every site is served by the same server.
 	 */
 	private const OPTION = 'yourmark_image_sizes_routing';
 
@@ -102,7 +103,7 @@ final class Health {
 	 * @return bool
 	 */
 	public static function direct(): bool {
-		$routing = get_option( self::OPTION );
+		$routing = self::result();
 
 		return is_array( $routing ) && ! empty( $routing['ok'] );
 	}
@@ -113,7 +114,16 @@ final class Health {
 	 * @return bool
 	 */
 	public static function checked(): bool {
-		return is_array( get_option( self::OPTION ) );
+		return is_array( self::result() );
+	}
+
+	/**
+	 * The last result, the network's; a site's own from before it became one until the main site has tested.
+	 *
+	 * @return mixed
+	 */
+	private static function result() {
+		return get_site_option( self::OPTION, get_option( self::OPTION ) );
 	}
 
 	/**
@@ -123,7 +133,7 @@ final class Health {
 	 */
 	public static function check(): bool {
 		$token = strtolower( wp_generate_password( 24, false ) );
-		set_transient( self::TOKEN, $token, 5 * MINUTE_IN_SECONDS );
+		set_site_transient( self::TOKEN, $token, 5 * MINUTE_IN_SECONDS );
 
 		$response = wp_remote_get(
 			add_query_arg( 'token', $token, wp_get_upload_dir()['baseurl'] . '/' . self::PROBE ),
@@ -137,14 +147,13 @@ final class Health {
 
 		$ok = wp_remote_retrieve_header( $response, 'x-yourmark-image-sizes' ) === $token;
 
-		delete_transient( self::TOKEN );
-		update_option(
+		delete_site_transient( self::TOKEN );
+		update_site_option(
 			self::OPTION,
 			[
 				'ok'      => $ok,
 				'checked' => time(),
-			],
-			true
+			]
 		);
 
 		return $ok;
@@ -158,7 +167,12 @@ final class Health {
 	 * @return void
 	 */
 	public static function schedule_check(): void {
-		$routing = get_option( self::OPTION );
+		// One server, so one test: the main site runs it for the whole network.
+		if ( ! is_main_site() ) {
+			return;
+		}
+
+		$routing = get_site_option( self::OPTION );
 
 		if ( is_array( $routing ) && (int) ( $routing['checked'] ?? 0 ) > time() - DAY_IN_SECONDS ) {
 			return;
@@ -175,7 +189,7 @@ final class Health {
 	 * @return void
 	 */
 	public static function answer_probe(): void {
-		$token = get_transient( self::TOKEN );
+		$token = get_site_transient( self::TOKEN );
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- A one-off token from check(), not a form.
 		$given = isset( $_GET['token'] ) ? sanitize_key( wp_unslash( $_GET['token'] ) ) : '';
 

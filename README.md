@@ -136,6 +136,13 @@ attachment. Never converted: the site icon (iOS ignores a WebP or AVIF
 apple-touch-icon) and animated WebP or PNG (conversion keeps only the first
 frame).
 
+## Multisite
+
+On a network, the server test and the format are the network's: one server
+serves every site. The main site runs the test and is the only one that shows
+the format under Settings > Media; every site reads both. Until the main site
+has tested, a site keeps the result it had from before the network.
+
 ## What gets deleted
 
 Only files that this plugin or core made for an attachment. The plugin records

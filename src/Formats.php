@@ -52,6 +52,32 @@ final class Formats {
 		add_filter( 'image_editor_output_format', [ self::class, 'output_format' ], 10, 3 );
 		add_filter( 'wp_editor_set_quality', [ self::class, 'quality' ], 10, 2 );
 		add_filter( 'wp_save_image_editor_file', [ self::class, 'save_edit' ], 10, 4 );
+
+		// On a network the main site's choice is everyone's: one server, one set of files.
+		add_action( 'add_option_' . self::OPTION, [ self::class, 'share' ] );
+		add_action( 'update_option_' . self::OPTION, [ self::class, 'share' ] );
+	}
+
+	/**
+	 * The chosen format: original, webp or avif. On a network, the main site's.
+	 *
+	 * @return string
+	 */
+	public static function chosen(): string {
+		$own = (string) get_option( self::OPTION, 'webp' );
+
+		return is_multisite() ? (string) get_site_option( self::OPTION, $own ) : $own;
+	}
+
+	/**
+	 * Copy the main site's choice to the network, where every site reads it.
+	 *
+	 * @return void
+	 */
+	public static function share(): void {
+		if ( is_multisite() && is_main_site() ) {
+			update_site_option( self::OPTION, self::sanitize( get_option( self::OPTION, 'webp' ) ) );
+		}
 	}
 
 	/**
@@ -88,7 +114,7 @@ final class Formats {
 	 * @return string|null
 	 */
 	public static function target(): ?string {
-		$format = (string) get_option( self::OPTION, 'webp' );
+		$format = self::chosen();
 
 		// A host without AVIF support still gets WebP rather than the uploaded JPEG.
 		if ( $format === 'avif' && ! self::supports( 'image/avif' ) ) {

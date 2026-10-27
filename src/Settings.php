@@ -32,6 +32,11 @@ final class Settings {
 	 * @return void
 	 */
 	public static function add_fields(): void {
+		// On a network only the main site chooses; see Formats::chosen().
+		if ( ! is_main_site() ) {
+			return;
+		}
+
 		register_setting(
 			'media',
 			Formats::OPTION,
@@ -65,7 +70,7 @@ final class Settings {
 	 * @return void
 	 */
 	public static function format_field(): void {
-		$current = Formats::sanitize( get_option( Formats::OPTION, 'webp' ) );
+		$current = Formats::sanitize( Formats::chosen() );
 		$choices = [
 			'original' => [ __( 'As uploaded', 'yourmark-image-sizes' ), __( 'JPEG and PNG stay JPEG and PNG.', 'yourmark-image-sizes' ) ],
 			'webp'     => [ __( 'WebP', 'yourmark-image-sizes' ), __( 'Works in every browser. The safe choice.', 'yourmark-image-sizes' ) ],
