@@ -213,6 +213,8 @@ mysql -uroot -e 'CREATE DATABASE IF NOT EXISTS yourmark_image_sizes_tests'
 composer test
 ```
 
+`composer test` runs the suite twice, as a single site and as a network.
+
 The database settings default to Herd's (root, no password, 127.0.0.1) and can
 be overridden with `WP_TESTS_DB_NAME`, `WP_TESTS_DB_USER`, `WP_TESTS_DB_PASSWORD`
 and `WP_TESTS_DB_HOST`.
@@ -223,6 +225,9 @@ and `WP_TESTS_DB_HOST`.
   `1536x1536` by default.
 - `yourmark/image-sizes/concurrency`: images resized at once. Default 2.
 - `yourmark/image-sizes/wait`: seconds a request waits for its turn. Default 10.
+- `yourmark/image-sizes/files_site`: the site that records the files this
+  plugin makes, for cleanup. The current site by default; a network sharing one
+  media library points it at the library's site.
 - `yourmark/image-sizes/enabled`: switch lazy sizes off.
 - `yourmark/image-sizes/steps`: in-between widths offered in `srcset`.
 - `yourmark/image-sizes/defer`: answer a missing size with a larger file at

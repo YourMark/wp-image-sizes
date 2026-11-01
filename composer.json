@@ -12,7 +12,10 @@
         "yoast/phpunit-polyfills": "^4.0"
     },
     "scripts": {
-        "test": "phpunit"
+        "test": [
+            "phpunit",
+            "WP_MULTISITE=1 phpunit"
+        ]
     },
     "config": {
         "sort-packages": true

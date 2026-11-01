@@ -18,6 +18,26 @@ PHP_SAPI === 'cli' || exit;
  */
 final class PrunerTest extends TestCase {
 
+	public function test_files_made_through_another_site_are_recorded_on_the_files_site(): void {
+		if ( ! is_multisite() ) {
+			$this->markTestSkipped( 'Needs a network.' );
+		}
+
+		$id    = $this->upload( $this->image( 'red.jpg' ) );
+		$other = self::factory()->blog->create();
+		$main  = get_current_blog_id();
+		$site  = fn(): int => $main;
+
+		add_filter( 'yourmark/image-sizes/files_site', $site );
+		switch_to_blog( $other );
+		Pruner::record( $id, 'red-650x488.webp' );
+		$this->assertContains( 'red-650x488.webp', Pruner::made( $id ), 'Read back through the other site.' );
+		restore_current_blog();
+		remove_filter( 'yourmark/image-sizes/files_site', $site );
+
+		$this->assertContains( 'red-650x488.webp', Pruner::made( $id ), 'Recorded on the files site.' );
+	}
+
 	public function test_a_file_merely_named_like_a_size_is_never_deleted(): void {
 		$id      = $this->upload( $this->image( 'red.jpg' ) );
 		$foreign = $this->path( $id, 'red-650x488.webp' );

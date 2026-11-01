@@ -31,9 +31,13 @@ final class Pruner {
 	 * @return void
 	 */
 	public static function record( int $attachment_id, string $file ): void {
-		if ( ! in_array( $file, self::made( $attachment_id ), true ) ) {
-			add_post_meta( $attachment_id, self::MADE, basename( $file ) );
-		}
+		self::on_files_site(
+			function () use ( $attachment_id, $file ): void {
+				if ( ! in_array( basename( $file ), self::made( $attachment_id ), true ) ) {
+					add_post_meta( $attachment_id, self::MADE, basename( $file ) );
+				}
+			}
+		);
 	}
 
 	/**
@@ -43,7 +47,7 @@ final class Pruner {
 	 * @return string[] File names.
 	 */
 	public static function made( int $attachment_id ): array {
-		return array_map( fn( $file ): string => basename( (string) $file ), (array) get_post_meta( $attachment_id, self::MADE, false ) );
+		return self::on_files_site( fn(): array => array_map( fn( $file ): string => basename( (string) $file ), (array) get_post_meta( $attachment_id, self::MADE, false ) ) );
 	}
 
 	/**
@@ -187,21 +191,56 @@ final class Pruner {
 	 * @return void
 	 */
 	public static function forget( int $attachment_id, array $files ): void {
-		foreach ( $files as $file ) {
-			delete_post_meta( $attachment_id, self::MADE, $file );
+		self::on_files_site(
+			function () use ( $attachment_id, $files ): void {
+				foreach ( $files as $file ) {
+					delete_post_meta( $attachment_id, self::MADE, $file );
+				}
+
+				$meta = wp_get_attachment_metadata( $attachment_id, true );
+
+				if ( ! is_array( $meta ) || empty( $meta['sizes'] ) ) {
+					return;
+				}
+
+				$sizes = array_filter( (array) $meta['sizes'], fn( $size ): bool => ! in_array( $size['file'] ?? '', $files, true ) );
+
+				if ( count( $sizes ) !== count( $meta['sizes'] ) ) {
+					$meta['sizes'] = $sizes;
+					wp_update_attachment_metadata( $attachment_id, $meta );
+				}
+			}
+		);
+	}
+
+	/**
+	 * Run a callback on the site whose tables own the attachment files.
+	 *
+	 * On a network that shares one media library, a size requested through another site is still the library's
+	 * file; recorded on the requesting site, the library's cleanup would never find it.
+	 *
+	 * @template T
+	 * @param callable(): T $callback Callback.
+	 * @return T
+	 */
+	private static function on_files_site( callable $callback ) {
+		/**
+		 * Filters the site that records and cleans up attachment files.
+		 *
+		 * @param int $site_id Site ID; the current site by default.
+		 */
+		$site_id = (int) apply_filters( 'yourmark/image-sizes/files_site', get_current_blog_id() );
+
+		if ( ! is_multisite() || $site_id === get_current_blog_id() ) {
+			return $callback();
 		}
 
-		$meta = wp_get_attachment_metadata( $attachment_id, true );
+		switch_to_blog( $site_id );
 
-		if ( ! is_array( $meta ) || empty( $meta['sizes'] ) ) {
-			return;
-		}
-
-		$sizes = array_filter( (array) $meta['sizes'], fn( $size ): bool => ! in_array( $size['file'] ?? '', $files, true ) );
-
-		if ( count( $sizes ) !== count( $meta['sizes'] ) ) {
-			$meta['sizes'] = $sizes;
-			wp_update_attachment_metadata( $attachment_id, $meta );
+		try {
+			return $callback();
+		} finally {
+			restore_current_blog();
 		}
 	}
 }

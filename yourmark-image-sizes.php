@@ -2,6 +2,13 @@
 /**
  * Plugin Name: YourMark image sizes
  * Description: Makes each image size the first time something uses it, in the format chosen under Settings > Media.
+ * Version: 1.0.0
+ * Requires at least: 7.1
+ * Requires PHP: 8.2
+ * Author: YourMark
+ * Author URI: https://yourmark.nl
+ * License: GPL-2.0-or-later
+ * Update URI: false
  *
  * Nothing but the original is written at upload. Every registered size exists
  * in the attachment metadata only, until a request for its file reaches
