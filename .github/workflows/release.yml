@@ -1,0 +1,30 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  zips:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The plugin zip is the repository minus everything marked export-ignore.
+      # The mu-plugin zip adds a loader, since WordPress loads no mu-plugin from a subdirectory.
+      - name: Build
+        run: |
+          mkdir -p build/mu
+          git archive --format=zip --prefix=yourmark-image-sizes/ -o build/yourmark-image-sizes.zip HEAD
+          cd build/mu
+          unzip -q ../yourmark-image-sizes.zip
+          printf '%s\n' '<?php' '/**' ' * Plugin Name: YourMark image sizes (loader)' ' * Description: Loads YourMark image sizes from its folder.' ' */' '' "require __DIR__ . '/yourmark-image-sizes/yourmark-image-sizes.php';" > yourmark-image-sizes-loader.php
+          zip -qr ../yourmark-image-sizes-mu.zip yourmark-image-sizes yourmark-image-sizes-loader.php
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" build/yourmark-image-sizes.zip build/yourmark-image-sizes-mu.zip --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md."

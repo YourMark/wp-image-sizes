@@ -10,6 +10,11 @@ Works with any theme. It hooks into core's attachment metadata, so `srcset`,
 
 ## Install
 
+Needs WordPress 7.1 and PHP 8.2. Afterwards, set up the server as under
+[Servers](#servers).
+
+### Composer
+
 The repository is private. Give Composer a GitHub token with read access, then:
 
 ```json
@@ -24,15 +29,19 @@ The repository is private. Give Composer a GitHub token with read access, then:
 ```
 
 It is a `wordpress-muplugin` and installs into `mu-plugins/yourmark-image-sizes/`.
-Bedrock's autoloader loads it from there. Without Bedrock, add a loader,
-since WordPress loads no mu-plugin from a subdirectory:
+WordPress loads no mu-plugin from a subdirectory by itself:
+[Bedrock](https://roots.io/bedrock/)'s autoloader does, and on any other
+Composer install `roots/bedrock-autoloader` does the same.
 
-```php
-<?php
-require WPMU_PLUGIN_DIR . '/yourmark-image-sizes/yourmark-image-sizes.php';
-```
+### Download
 
-Then set up the server as under [Servers](#servers). Needs WordPress 7.1.
+Every [release](https://github.com/YourMark/wp-image-sizes/releases) has two zips:
+
+- `yourmark-image-sizes.zip` is a regular plugin: upload it under Plugins > Add New.
+- `yourmark-image-sizes-mu.zip` holds the folder and a loader. Unzip it into
+  `wp-content/mu-plugins/`, since wp-admin cannot upload mu-plugins.
+
+Installed both ways, it loads once. A zip install does not update itself.
 
 ## How it works
 
@@ -226,6 +235,11 @@ Remove the plugin, then run `wp media regenerate --only-missing`: core makes
 every size the plugin left lazy. Files the plugin made stay on disk, as do the
 `_yourmark_image_sizes_*` post meta rows; both are harmless, and the plugin
 picks them up again when it comes back.
+
+## Releases
+
+A tag `v1.2.3` builds both zips and attaches them to a GitHub release. Bump
+the version in the plugin header and `YOURMARK_IMAGE_SIZES_VERSION` first.
 
 ## Tests
 
