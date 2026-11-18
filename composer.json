@@ -1,15 +1,19 @@
 {
-    "name": "yourmark/image-sizes",
+    "name": "yourmark/wp-image-sizes",
     "description": "Makes each WordPress image size the first time something uses it.",
     "type": "wordpress-muplugin",
-    "license": "proprietary",
+    "license": "GPL-2.0-or-later",
     "require": {
-        "php": ">=8.3"
+        "php": ">=8.2",
+        "composer/installers": "^2.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^9.6",
         "wp-phpunit/wp-phpunit": "7.1.*",
         "yoast/phpunit-polyfills": "^4.0"
+    },
+    "extra": {
+        "installer-name": "yourmark-image-sizes"
     },
     "scripts": {
         "test": [
@@ -18,6 +22,9 @@
         ]
     },
     "config": {
-        "sort-packages": true
+        "sort-packages": true,
+        "allow-plugins": {
+            "composer/installers": true
+        }
     }
 }

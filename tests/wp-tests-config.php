@@ -25,7 +25,8 @@ function yourmark_image_sizes_tests_env( string $name, string $fallback ): strin
 	return $value === false ? $fallback : $value;
 }
 
-define( 'ABSPATH', dirname( __DIR__, 4 ) . '/wp/' );
+// Inside a Bedrock site by default; standalone, point WP_CORE_DIR at a WordPress install.
+define( 'ABSPATH', rtrim( yourmark_image_sizes_tests_env( 'WP_CORE_DIR', dirname( __DIR__, 4 ) . '/wp' ), '/' ) . '/' );
 define( 'WP_CONTENT_DIR', sys_get_temp_dir() . '/yourmark-image-sizes-tests' );
 define( 'WP_CONTENT_URL', 'http://example.org/wp-content' );
 

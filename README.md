@@ -8,6 +8,32 @@ After that, the web server serves it as an ordinary static file.
 Works with any theme. It hooks into core's attachment metadata, so `srcset`,
 `wp_get_attachment_image()`, the block editor and plugins see ordinary sizes.
 
+## Install
+
+The repository is private. Give Composer a GitHub token with read access, then:
+
+```json
+{
+  "repositories": [
+    { "type": "vcs", "url": "https://github.com/YourMark/wp-image-sizes" }
+  ],
+  "require": {
+    "yourmark/wp-image-sizes": "^1.0"
+  }
+}
+```
+
+It is a `wordpress-muplugin` and installs into `mu-plugins/yourmark-image-sizes/`.
+Bedrock's autoloader loads it from there. Without Bedrock, add a loader,
+since WordPress loads no mu-plugin from a subdirectory:
+
+```php
+<?php
+require WPMU_PLUGIN_DIR . '/yourmark-image-sizes/yourmark-image-sizes.php';
+```
+
+Then set up the server as under [Servers](#servers). Needs WordPress 7.1.
+
 ## How it works
 
 1. **Upload:** the original is stored in the chosen format (Settings > Media),
@@ -44,7 +70,7 @@ Works with any theme. It hooks into core's attachment metadata, so `srcset`,
      upper bound (`100vw`, `calc()`) keeps the whole list.
    - **Per site:** a layout the blocks do not describe, such as a grid in the
      theme's CSS, is invisible to this. Set `sizes` on those images in the
-     theme, as `app/filters.php` does for the project cards; the plugin keeps
+     theme, with the `wp_get_attachment_image_attributes` filter; the plugin keeps
      a `sizes` that is already there.
 2. **First request:** WordPress checks that the file name belongs to an image
    of this site, makes the size its metadata lists, sends it and leaves it on
@@ -203,11 +229,11 @@ picks them up again when it comes back.
 
 ## Tests
 
-Integration tests run on the WordPress test suite, against this site's core in
-`web/wp`, a separate database and a throwaway content directory:
+Integration tests run on the WordPress test suite, against a WordPress core, a
+separate database and a throwaway content directory. Inside a Bedrock site they
+use its `web/wp`; elsewhere, set `WP_CORE_DIR` to a WordPress 7.1 install.
 
 ```bash
-cd web/app/mu-plugins/yourmark-image-sizes
 composer install
 mysql -uroot -e 'CREATE DATABASE IF NOT EXISTS yourmark_image_sizes_tests'
 composer test
