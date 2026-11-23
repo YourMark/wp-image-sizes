@@ -15,7 +15,7 @@ Needs WordPress 7.1 and PHP 8.2. Afterwards, set up the server as under
 
 ### Composer
 
-The repository is private. Give Composer a GitHub token with read access, then:
+Add the repository and require the package:
 
 ```json
 {
