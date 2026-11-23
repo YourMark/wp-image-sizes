@@ -9,6 +9,8 @@
  * Author URI: https://yourmark.nl
  * License: GPL-2.0-or-later
  * Update URI: false
+ * Text Domain: yourmark-image-sizes
+ * Domain Path: /languages
  *
  * Nothing but the original is written at upload. Every registered size exists
  * in the attachment metadata only, until a request for its file reaches
@@ -20,6 +22,13 @@
 namespace YourMark\ImageSizes;
 
 defined( 'ABSPATH' ) || exit;
+
+// Installed both as a mu-plugin and as a plugin, it would load twice and fatal.
+if ( defined( 'YOURMARK_IMAGE_SIZES_VERSION' ) ) {
+	return;
+}
+
+define( 'YOURMARK_IMAGE_SIZES_VERSION', '1.0.0' );
 
 require_once __DIR__ . '/src/Sizes.php';
 require_once __DIR__ . '/src/Formats.php';
@@ -39,7 +48,11 @@ require_once __DIR__ . '/src/Admin.php';
 add_action(
 	'init',
 	static function (): void {
-		load_muplugin_textdomain( 'yourmark-image-sizes', 'yourmark-image-sizes/languages' );
+		if ( str_starts_with( wp_normalize_path( __DIR__ ), wp_normalize_path( WPMU_PLUGIN_DIR ) ) ) {
+			load_muplugin_textdomain( 'yourmark-image-sizes', basename( __DIR__ ) . '/languages' );
+		} else {
+			load_plugin_textdomain( 'yourmark-image-sizes', false, basename( __DIR__ ) . '/languages' );
+		}
 	}
 );
 
