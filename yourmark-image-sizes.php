@@ -2,7 +2,7 @@
 /**
  * Plugin Name: YourMark image sizes
  * Description: Makes each image size the first time something uses it, in the format chosen under Settings > Media.
- * Version: 1.0.1
+ * Version: 1.0.0
  * Requires at least: 7.1
  * Requires PHP: 8.2
  * Author: YourMark
@@ -28,7 +28,7 @@ if ( defined( 'YOURMARK_IMAGE_SIZES_VERSION' ) ) {
 	return;
 }
 
-define( 'YOURMARK_IMAGE_SIZES_VERSION', '1.0.1' );
+define( 'YOURMARK_IMAGE_SIZES_VERSION', '1.0.0' );
 
 require_once __DIR__ . '/src/Sizes.php';
 require_once __DIR__ . '/src/Formats.php';

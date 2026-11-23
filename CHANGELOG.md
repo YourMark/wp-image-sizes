@@ -1,12 +1,14 @@
 # Changelog
 
-## 1.0.1
-
-**Features**
-
-- A plugin zip and a mu-plugin zip on every release, for sites without Composer.
-- Works as a regular plugin too: translations load from either folder, and installed both ways it loads once.
-
 ## 1.0.0
 
-First release as a package, moved out of the yourmark.nl repository.
+First release.
+
+- Writes only the original at upload and makes each image size the first time something requests it.
+- WebP, AVIF or the uploaded format, chosen under Settings > Media; older uploads can be converted.
+- In-between widths and a `srcset` per placement in the block tree.
+- Deferred resizing on PHP-FPM and LiteSpeed, so a visitor never waits for one.
+- Media library, Site Health and `wp image-sizes` tools to make, warm, convert and clean up sizes.
+- Works on a network sharing one media library.
+- Installs as a mu-plugin or a regular plugin, with Composer or from a release zip.
+- Dutch translation.
